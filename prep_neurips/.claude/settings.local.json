@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(update-config)",
+      "Bash(grep -n \"^\\\\\\\\\\\\\\\\section\\\\|^\\\\\\\\\\\\\\\\subsection\\\\|^\\\\\\\\\\\\\\\\begin{definition}\\\\|^\\\\\\\\\\\\\\\\begin{theorem}\\\\|^\\\\\\\\\\\\\\\\begin{lemme}\\\\|^\\\\\\\\\\\\\\\\begin{proposition}\" \"C:\\\\Users\\\\mnica\\\\Documents\\\\stage INRIA\\\\prep_neurips\\\\RR_Semirelaxed_OT_NICAISE_2026\\\\RR_semi_relaxed.tex\")",
+      "Bash(grep *)"
+    ]
+  }
+}

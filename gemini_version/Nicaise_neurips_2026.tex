@@ -1,0 +1,1410 @@
+\documentclass{article}
+\usepackage{neurips_2026}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{mathtools}
+\usepackage{dsfont}
+\usepackage{bm}
+\usepackage{enumitem}
+\usepackage{mathrsfs}
+\usepackage[ruled, vlined]{algorithm2e}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{IEEEtrantools}
+
+\newtheorem{definition}{Definition}[section]
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{example}{Example}[section]
+\newtheorem{corollary}{Corollary}[section]
+\newtheorem{lemma}{Lemma}[section]
+
+\newcommand{\eqas}[1]{\displaystyle\mathop{ \stackrel{a.s.}{=}}_{#1}}
+\newcommand{\geqas}[1]{\displaystyle\mathop{ \stackrel{a.s.}{\geq}}_{#1}}
+\newcommand{\leqas}[1]{\displaystyle\mathop{ \stackrel{a.s.}{\leq}}_{#1}}
+\newcommand{\strictleqas}[1]{\displaystyle\mathop{ \stackrel{a.s.}{<}}_{#1}}
+\newcommand{\strictgeqas}[1]{\displaystyle\mathop{ \stackrel{a.s.}{>}}_{#1}}
+\newcommand{\subsetas}[1]{\displaystyle\mathop{ \stackrel{a.s.}{\subset}}_{#1}}
+
+\newcommand{\middlesqueezeequAggressive}{%
+  \thinmuskip=0mu
+  \medmuskip=0.4mu
+  \thickmuskip=0.8mu
+  \nulldelimiterspace=-1pt
+  \scriptspace=0pt
+}
+\newcommand{\middlesqueezeequBrutal}{%
+  \thinmuskip=0mu
+  \medmuskip=0mu
+  \thickmuskip=0.3mu
+  \nulldelimiterspace=-1.5pt
+  \scriptspace=0pt
+}
+
+\title{On semi-relaxed optimal transport}
+\author{%
+  Maxime Nicaise \\
+  INRIA, Centre Inria d'Université Côte d'Azur \\
+  \And
+  Yaiza Bermudez \\
+  INRIA, Centre Inria d'Université Côte d'Azur \\
+  \AND
+  Samir M. Perlaza \\
+  INRIA, Centre Inria d'Université Côte d'Azur \\
+  Princeton University
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Semi-relaxed optimal transport generalizes the classical optimal transport problem by relaxing one of the marginal constraints. While standard approaches rely on linear programming, they suffer from significant computational complexity. In this paper, we propose a novel regularized formulation for semi-relaxed optimal transport that leads to an efficient Sinkhorn-like alternating maximization scheme. We provide a rigorous dual formulation in the log-domain and prove strong duality. Furthermore, we establish the existence and uniqueness of the dual potentials and demonstrate the linear convergence of both the potentials and the primal objective. Our theoretical guarantees do not require finite space assumptions, extending the applicability of these methods to more general settings.
+\end{abstract}
+
+\section{Introduction}
+Optimal transport has emerged as a powerful tool in machine learning and applied mathematics for comparing probability distributions. However, in many practical scenarios, the exact matching of both marginals is too restrictive. Semi-relaxed optimal transport addresses this limitation by strictly enforcing only one marginal constraint while relaxing the other, often using a divergence penalty. This formulation is particularly relevant for applications where the target distribution is only partially known or subject to noise.
+
+\subsection{Background and Related Works}
+\paragraph{Notations and preliminaries.}
+Given a function $f: \mathcal{X} \to \mathcal{Y}$, its effective domain is denoted by $\operatorname{dom}(f) \triangleq \{x \in \mathcal{X}: f(x) < +\infty\}$; and its range is denoted by $\operatorname{Ran}(f) \triangleq \left\lbrace f(x) : x \in \mathcal{X} \right\rbrace$. Given a set $\mathcal{A}$, its interior is denoted by $\operatorname{int}(\mathcal A)$. 
+Given two measures $\mu$ and $\nu$, the notation $\mu \ll \nu$ signifies that $\mu$ is absolutely continuous with respect to $\nu$. Across this paper, $\mathcal{X}$ and $\mathcal{Y}$ are Polish spaces.
+The set of probability measures over $\mathcal{X}$ equipped with the $\sigma$-field of Borel sets is denoted by $\triangle(\mathcal{X})$.
+The set of $p$-integrable functions with respect to $P$ is denoted by $\operatorname{L}^p(\mathcal{X},P)$.
+Given two probability measures $P \in \triangle(\mathcal{X})$ and $Q \in \triangle(\mathcal{Y})$, the notation $\Pi(P,Q)$ denotes the set of probability measures on $\mathcal{X}\times \mathcal{Y}$ with marginals $P$ and $Q$ in $\triangle(\mathcal{X})$ and $\triangle(\mathcal{Y})$, respectively. The probability measures in $\Pi(P,Q)$ are called couplings. By extension, $\Pi(P, \star)$ denotes the set of probability measures on $\mathcal{X} \times \mathcal{Y}$ where only the first marginal is constrained to be $P$. The product measure of $P \in \triangle(\mathcal{X})$ and $Q \in \triangle(\mathcal{Y})$ in $\triangle(\mathcal{X}\times\mathcal{Y})$ is denoted by $PQ$. The first marginal of a measure $\pi \in \triangle(\mathcal X \times \mathcal Y)$ is denoted by $\pi_{\#}^{\mathcal{X}}$. Similarly, its second marginal is denoted by $\pi_{\#}^{\mathcal{Y}}$. Given two functions $f : \mathcal{X}\to\mathbb{R}$ and $g : \mathcal{X}\to\mathbb{R}$, the notation $f \eqas{P} g$ means that $f$ and $g$ are almost surely equal with respect to $P$. Similarly, the notation $f \geqas{P} g$ means that $f$ is greater than $g$ almost surely with respect to $P$. Given $\mathcal A$ and $\mathcal B$, two subsets of $\mathcal{X}$, the notation $\mathcal A \subsetas{P} \mathcal{B}$ means that $P(\mathcal A \setminus \mathcal B) = 0$. Let $\mathcal E$ be a Banach space and $\mathcal E'$ be its topological dual space.
+Given $x \in \mathcal E $ and $y \in \mathcal E'$, $\langle y,x \rangle$ denotes the dual pairing between $y$ and $x$.
+If $f : \mathcal{X} \to \mathbb{R}$ and $g : \mathcal{Y} \to \mathbb{R}$ are two real functions then $f\oplus g : \mathcal{X}\times\mathcal{Y}\to \mathbb{R}$ is the function defined through $f\oplus g (x,y) = f(x)+g(y)$. The following definition formalizes the notion of admissibility for an optimization problem, ensuring that candidates yield a finite value within the functional domain.
+
+\begin{definition}
+  \label{definiton_dinstance_admissible}
+  Given a set $\mathcal{M}$ and a functional $R: \mathcal{M} \to \mathbb{R}\cup\{+\infty\}$, an instance $\theta \in \mathcal{M}$ is said to be admissible for the following problem
+  \begin{IEEEeqnarray}{rCl}
+  \inf_{\nu \in \mathcal{M}} R(\nu),
+\end{IEEEeqnarray}
+if $R(\theta)<+\infty$.
+\end{definition}
+
+Analysis of optimality conditions and the derivation of dual problems rely heavily on the transformation of functions into a dual space representation. This operation is performed through the convex conjugate, providing a bridge between primal and dual variables in Banach spaces. The convex conjugate is defined below.
+
+\begin{definition}
+  \label{definiton_convex_conjugate}
+  Let $\mathcal E$ be a Banach space and $\mathcal E'$ be its topological dual space.
+Let $\phi : \mathcal E \to \mathbb{R} \cup \{-\infty,+\infty \}$; the convex conjugate (or Fenchel conjugate) of $\phi$ is the function $\phi^* : \mathcal E' \to \mathbb{R} \cup \{-\infty,+\infty \}$ defined for $y \in \mathcal E'$ through (see \cite[Section~2.3]{Zalinescu2002})
+\begin{IEEEeqnarray}{rCl}
+\phi^*(y) = \sup_{x \in \mathcal{E}} (\langle y,x \rangle - \phi(x)).
+\end{IEEEeqnarray}
+\end{definition}
+
+Complementary to the convex conjugate, the indicator function serves as a fundamental tool through which constraints are encoded directly into the objective functional. This formulation is particularly suited for optimal transport problems, as it ensures the strict enforcement of marginal constraints. The following definition formalises this concept, providing a mechanism to assign an infinite cost to any instance outside the feasible set.
+
+\begin{definition}
+  \label{definiton_indicator_function}
+  Let $\mathcal C$ be a subset of a set $\mathcal E$. The indicator function of $\mathcal C$, denoted through $\iota_{\mathcal C}$, is defined as:
+  \begin{IEEEeqnarray}{rCl}
+    \iota_{\mathcal C}(x) = \begin{cases} 
+      0 & \text{if } x \in \mathcal C; \\
+      +\infty & \text{if } x \notin \mathcal C.
+    \end{cases}
+  \end{IEEEeqnarray}
+\end{definition}
+
+\section{Problem Formulation: Semi-Relaxed Optimal Transport}
+Throughout this section, $(\mathcal{X},P)$ and $(\mathcal{Y},Q)$ are fixed probability spaces. The function $\mathsf{c}: \mathcal X \times \mathcal Y \to \mathbb{R}$ is a lower semi-continuous measurable function. Consider the problem of semi-relaxed optimal transport, defined as follows
+\begin{IEEEeqnarray}{rCl}
+  \inf_{\pi \in \Pi(P,\star)} \int_{\mathcal X \times \mathcal Y} \mathsf{c}(x,y) \mathrm{d}\pi(x,y).
+\end{IEEEeqnarray}
+
+Standard approaches for solving semi-constrained optimal transport problems often rely on linear programming \cite{cuturi2013sinkhorn}. However, these methods involve significant computational complexity, which frequently becomes prohibitive for large-scale datasets or high-dimensional problems. Such linear programming formulations scale poorly with the number of support points, making them computationally intractable for many modern machine learning applications.
+
+\section{Sinkhorn-Like Regularization Scheme}
+Throughout this section, $(\mathcal{X},P)$ and $(\mathcal{Y},Q)$ are fixed probability spaces. The function $\mathsf{c}: \mathcal X \times \mathcal Y \to \mathbb{R}$ is a lower semi-continuous, measurable, bounded function, and $\alpha$ and $\beta$ are strictly positive numbers.
+The objective is to extend the results established in the seminal work of \cite{cuturi2013sinkhorn} to the framework of semi-relaxed optimal transport. This goal is achieved through a specific choice of regularization that ensures the dual problem is amenable to Sinkhorn-like iterations. The proposed scheme fits within the general framework introduced in \cite{chizat2018scaling}. More precisely, the problem is a particular instance of \cite[Equation 3.1]{chizat2018scaling} where $n=1$, the functional $\mathcal{F}_1$ is the indicator function of the set $\{P\}$, and $\mathcal{F}_2$ equals $\beta$ times the Kullback-Leibler (KL) divergence with respect to $Q$, with $\beta$ strictly positive. The reference measures, denoted as $dx$ and $dy$ in \cite{chizat2018scaling}, correspond here to $P$ and $Q$, respectively. This specialization leads to the following problem
+\begin{IEEEeqnarray}{rCl}
+  \label{primal_avec_2_KL}
+  \inf_{\pi \in \Pi(P,\star)} \mathsf{P}(\pi) \triangleq \int_{\mathcal X \times \mathcal Y} \mathsf{c}(x,y) \mathrm{d}\pi(x,y)+\alpha D_{\operatorname{KL}}(\pi || PQ)  + \beta D_{\operatorname{KL}}(\pi^{\mathcal Y}_{\#} || Q).
+\end{IEEEeqnarray}
+
+\subsection{Connections to Existing Dual Formulations}
+From \cite[Theorem~3.2]{chizat2018scaling}, the dual of problem \eqref{primal_avec_2_KL} can be written as follows
+\begin{IEEEeqnarray}{rCl}
+  \nonumber
+  \label{dual_par_chizat}
+  \sup_{u\in \operatorname{L}^\infty(\mathcal X), v \in \operatorname{L}^\infty(\mathcal{Y})}\  &&\int_{\mathcal{X}} u(x)\mathrm{d}P(x) - \beta \int_{\mathcal{Y}}\left(e^{-\frac{v(y)}{\beta}}-1\right)\mathrm{d}Q(y) \\ &&-\alpha \int_{\mathcal{X} \times \mathcal{Y}} \left( e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}-e^{-\frac{\mathsf{c}(x,y)}{\alpha}}\right)\mathrm{d}PQ(x,y). \ \ \ \
+\end{IEEEeqnarray}
+The theoretical results from \cite{chizat2018scaling} remain applicable to this dual formulation. In particular, strong duality holds, ensuring equality between the supremum in \eqref{dual_par_chizat} and the infimum in \eqref{primal_avec_2_KL}. The convergence properties established in \cite[Proposition~3.9, Theorem~4.1]{chizat2018scaling} are also valid. Nevertheless, this work aims to provide enhanced convergence results and refined theoretical guarantees. From \cite[Section~3.3, Table~1]{chizat2018scaling}, the iterates obtained by alternating maximization on $\mathsf{D}$ in \eqref{dual_par_chizat} can be written as follows
+\begin{subequations}
+    \label{sinkhorn_chizat_non_scale}
+\begin{IEEEeqnarray}{rCl}
+  \label{sinkhorn_chizat_sur_u}
+    u^{(l+1)} &=& -\alpha \log\left(\int_{\mathcal Y} e^{\frac{v^{(l)}(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}Q(y) \right); \\
+    \label{sinkhorn_chizat_sur_v}
+    v^{(l+1)} &=& - \frac{\alpha\beta}{\alpha+\beta}\log\left(\int_{\mathcal X} e^{\frac{u^{(l+1)}(x)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}P(x) \right).
+\end{IEEEeqnarray}
+\end{subequations}
+Or alternatively by considering the so-called scaled iterations 
+\begin{IEEEeqnarray}{rCl}
+  (a^{(l)},b^{(l)}) \triangleq (e^{\frac{u^{(l)}}{\alpha}},e^{\frac{v^{(l)}}{\alpha}}),
+\end{IEEEeqnarray}
+for which the algorithm is written as follows
+\begin{subequations}
+  \label{sinkhorn_chizat_scaled}
+\begin{IEEEeqnarray}{rCl}
+  \label{sinkhorn_chizat_sur_a}
+a^{(k+1)}(x)
+&=&
+\left(
+\int_{\mathcal Y}
+e^{-\frac{\mathsf D(x,y)}{\alpha}}
+\, b^{(k)}(y)^{-\frac{\beta}{\alpha}}
+\, \mathrm d Q(y)
+\right)^{-1};
+\\[1.2em]
+  \label{sinkhorn_chizat_sur_b}
+b^{(k+1)}(y)
+&=&
+\left(
+\int_{\mathcal X}
+e^{-\frac{\mathsf D(x,y)}{\alpha}}
+\, a^{(k+1)}(x)
+\, \mathrm d P(x)
+\right)^{\frac{\alpha}{\alpha+\beta}} .
+\end{IEEEeqnarray}
+\end{subequations}
+
+While these results hold in a highly general framework, it is possible to achieve tighter theoretical bounds by explicitly exploiting the structure of our semi-relaxed problem, particularly the fact that the feasible couplings are probability measures.
+
+\subsection{A Novel Functional Dual Formulation}
+This section proposes an alternative dual formulation aiming to strengthen the convergence results of the potentials without requiring finite space assumptions. The derivation in \cite{chizat2018scaling} is highly general and does not explicitly account for the fact that the feasible couplings for the primal problems are necessarily probability measures. The alternative derivation presented here utilizes the variational formula of the KL divergence. The dual problem is subsequently obtained through the inversion of the infimum and supremum. This approach results in a formulation situated in the log-domain, which shares structural similarities with the notion of free energy in statistical physics \cite{dimarino2020optimal}.
+\begin{IEEEeqnarray}{rCl}
+  \nonumber
+  \label{dual_maversion_fonctionnelle_C}
+  \sup_{u\in \operatorname{L}^\infty(\mathcal X), v \in \operatorname{L}^\infty(\mathcal{Y})}\ \mathsf{D}(u,v) \triangleq &&\int_{\mathcal{X}} u(x)\mathrm{d}P(x) - \beta \log\left(\int_{\mathcal{Y}}e^{-\frac{v(y)}{\beta}}\mathrm{d}Q(y)\right) \\ &&-\alpha \log\left(\int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}PQ(x,y)\right). \ \ 
+\end{IEEEeqnarray}
+
+\subsubsection{Weak Duality}
+\begin{lemma}
+  \label{lemme_dualite_faible}
+  Weak duality holds between the primal \eqref{primal_avec_2_KL} and the dual problem \eqref{dual_maversion_fonctionnelle_C}, that is
+  \begin{IEEEeqnarray}{rCl}
+    \sup_{u\in \operatorname{L}^\infty(\mathcal X), v \in \operatorname{L}^\infty(\mathcal{Y})}\ \mathsf{D}(u,v) \leq \inf_{\pi \in \Pi(P,\star)} \mathsf{P}(\pi)<+\infty.
+  \end{IEEEeqnarray}
+\end{lemma}
+The proof is detailed in Appendix \ref{app:proofs}. This weak duality result implies in particular that the value of the dual problem is strictly finite.
+
+\subsubsection{Dual Attainment}
+This alternative dual formulation, while appearing different, yields an alternating maximization scheme closely resembling the standard one. The following property reflects the fact that the functional $\mathsf{D}$ is not strictly concave, meaning the maximizing potentials are not unique. However, this property is instrumental in proving their existence.
+
+\begin{lemma}
+  \label{lemme_propriete_de_ma_fonctionnelle_duale}
+  For all functions $u\in \operatorname{L}^\infty(\mathcal X), v \in \operatorname{L}^\infty(\mathcal{Y}) $ and real numbers $M,N$, the dual functional $\mathsf{D}$ in \eqref{dual_maversion_fonctionnelle_C} satisfies
+  \begin{IEEEeqnarray}{rCl}
+    \label{propriete_de_ma_foncionnelle_duale}
+    \mathsf{D}(u,v) = \mathsf{D}(u+M,v) = \mathsf{D}(u,v+N).   
+  \end{IEEEeqnarray}
+\end{lemma}
+The proof is detailed in Appendix \ref{app:proofs}.
+
+\begin{lemma}
+  \label{lemme_differentiation}
+  The dual functional $\mathsf{D}$ in \eqref{dual_maversion_fonctionnelle_C} is differentiable on $L^\infty(\mathcal{X}) \times L^\infty(\mathcal{Y})$. Moreover, for all $(u,v) \in L^\infty(\mathcal{X}) \times L^\infty(\mathcal{Y})$ and directions $(a,b) \in L^\infty(\mathcal{X}) \times L^\infty(\mathcal{Y})$, its partial derivatives are given by
+  \begin{IEEEeqnarray}{rCl}
+    \label{differentiele_de_C_par_rapport_a_u} 
+     \langle \frac{\partial \mathsf{D}(u,v)}{\partial u},&& a\rangle \middlesqueezeequBrutal  = \int_{\mathcal X} a(x)\Bigg(1 - \   \frac{1}{Z(u,v)}\int_{\mathcal{Y}} e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}Q(y) \Bigg)\mathrm{d}P(x); \\  
+     \langle \frac{\partial \mathsf{D}(u,v)}{\partial v},&& b \rangle \middlesqueezeequBrutal = \int_{\mathcal Y} b(y)\Bigg(\frac{e^{-\frac{v(y)}{\beta}}}{\int_{\mathcal{Y} }e^{-\frac{v(y)}{\beta} \mathrm{d}Q(y)}} \label{differentiele_de_C_par_rapport_a_v} \  - \ \frac{1}{Z(u,v)}\int_{\mathcal X} e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}P(x)\Bigg)\mathrm{d}Q(y), \ \ \ \ 
+  \end{IEEEeqnarray}
+  where $Z(u,v)\triangleq \int_{\mathcal{X}\times\mathcal{Y}}
+\exp\!\Big(\frac{u(x)+v(y)-\mathsf D(x,y)}{\alpha}\Big)\,\mathrm dPQ(x,y).$
+\end{lemma}
+The proof is detailed in Appendix \ref{app:proofs}.
+
+By setting the partial derivatives to zero, and simultaneously enforcing a normalization condition, we obtain uniqueness of the updates and a simplified expression for the primal solution.
+
+\begin{corollary}
+  \label{lemme_transform}
+  Let $(\hat{u},\hat v)$ be in $\operatorname{L}^\infty(\mathcal X)\times\operatorname{L}^\infty(\mathcal{Y}) $. If for all $x\in \mathcal X$, $u$ satisfies 
+  \begin{IEEEeqnarray}{rCl}
+    \label{transform_pour_u}
+    \hat u(x)&=& \Phi(\hat v)(x);  \\ \label{formule_de_phi}
+    \text{with }\Phi(\hat v)(x) &\triangleq& - \alpha\log\left(\int_{\mathcal Y}e^{\frac{\hat v(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}Q(y) \right),    
+  \end{IEEEeqnarray}
+  then, $\hat u$ maximizes $u\mapsto \mathsf{D}(u,\hat v)$, where $\mathsf{D}$ is in \eqref{dual_maversion_fonctionnelle_C}. Similarly, if for all $y\in \mathcal{Y}$, $v$ satisfies 
+  \begin{IEEEeqnarray}{rCl}
+    \label{transform_pour_v}
+    \hat v(y) &=& \Psi(\hat u)(y): \\ \nonumber
+    \text{with } \Psi(\hat u)(y) &\triangleq&\beta\log\left(\int_{\mathcal Y}\left(\int_{\mathcal X}e^{\frac{\hat u(x)-\mathsf{c}(x,y')}{\alpha}}\mathrm{d}P(x)\right)^{\frac{\alpha}{\alpha+\beta}}\mathrm{d}Q(y') \right) \\ \label{formule_de_psi} && - \frac{\alpha\beta}{\alpha+\beta}\log\left(\int_{\mathcal{X}} e^{\frac{\hat u(x)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}P(x) \right),    
+  \end{IEEEeqnarray}
+  then, $\hat v$ maximizes $v\mapsto \mathsf{D}(\hat u, v)$. Moreover, if \eqref{transform_pour_u} and \eqref{transform_pour_v} are simultaneously satisfied, then $(\hat{u},\hat v)$ maximizes $(u,v)\mapsto \mathsf{D}(u, v)$.
+\end{corollary}
+The proof is detailed in Appendix \ref{app:proofs}.
+
+To arrive at the compactness arguments necessary for proving existence \cite{dimarino2020optimal}, we first bound the oscillations of the operators.
+
+\begin{lemma}
+  \label{lemme_osc_inegalites}
+  For all pair of functions $(u,v)$ in $\operatorname{L}^\infty(\mathcal X) \times \operatorname{L}^\infty(\mathcal{Y}) $, the operators $\Phi$ in \eqref{formule_de_phi} and $\Psi$ in \eqref{formule_de_psi} satisfy the following inequalities
+  \begin{IEEEeqnarray}{rCl}
+    \label{inegalite_osc_phi}
+    &&\operatorname{osc}(\Phi(v)) \leq 2\|c\|_\infty; \\  
+    \label{inegalite_osc_psi}
+    &&\operatorname{osc}(\Psi(u)) \leq \frac{2\beta}{\alpha+\beta}\|c\|_\infty.
+  \end{IEEEeqnarray}
+\end{lemma}
+The proof is detailed in Appendix \ref{app:proofs}.
+
+With the oscillation controlled, we can establish a uniform bound.
+
+\begin{lemma}
+  \label{lemme_controle_inegalites}
+  For all pair of functions $(u,v)$ in $\operatorname{L}^\infty(\mathcal X) \times \operatorname{L}^\infty(\mathcal{Y}) $, the operators $\Phi$ in \eqref{formule_de_phi} and $\Psi$ in \eqref{formule_de_psi} satisfy the following inequalities
+  \begin{IEEEeqnarray}{rCl}
+    \label{inegalite_mon_dual_1}
+    &&\|\Phi(v)\|_\infty \leq \|v\|_\infty + \|c\|_\infty; \\
+    \label{inegalite_mon_dual_2}
+    &&\|\Psi(u)\|_\infty \leq \frac{2\beta}{\alpha+\beta} \|c\|_\infty.
+  \end{IEEEeqnarray}
+\end{lemma}
+The proof is detailed in Appendix \ref{app:proofs}.
+
+This uniform bound enables the application of the Banach-Alaoglu theorem, making the proof of existence possible.
+
+\begin{corollary}
+  \label{corollaire_existence_de_mieux_bornes}
+  Let $(u,v)$ be a pair of functions in $\operatorname{L}^\infty(\mathcal X) \times \operatorname{L}^\infty(\mathcal{Y}) $. Then, there exists another pair $(f,g)$ in $\operatorname{L}^\infty(\mathcal X) \times \operatorname{L}^\infty(\mathcal{Y})$ such that
+  \begin{IEEEeqnarray}{rCl}
+    \mathsf{D}(u,v)\leq \mathsf{D}(f,g), \text{ and } \|f\|_\infty,\|g\|_\infty \leq M\|c\|_\infty,
+  \end{IEEEeqnarray}
+  where $\mathsf{D}$ is in \eqref{dual_maversion_fonctionnelle_C} and $M = \max(2,3\frac{\beta+1}{\alpha+\beta})$.
+\end{corollary}
+The proof is detailed in Appendix \ref{app:proofs}.
+
+\begin{theorem}
+The supremum in problem \eqref{dual_maversion_fonctionnelle_C} is attained.
+\end{theorem}
+The proof is detailed in Appendix \ref{app:proofs}.
+
+\subsection{Primal Attainment}
+Among all possible solutions to the dual problem, we deliberately defined the operators $\Phi$ and $\Psi$ to inherently satisfy normalization conditions. This specific choice allows for a direct and simplified derivation of the primal problem's solution without additional normalization steps.
+
+\begin{theorem}
+  \label{theoreme_attainment_primal}
+  The infimum in problem \eqref{primal_avec_2_KL} is attained at a unique measure $\hat \pi \in \Pi(P,\star)$. Moreover, $\hat \pi$ is absolutely continuous with respect to the product measure $PQ$, and its density can be written as
+  \begin{IEEEeqnarray}{rCl}
+    \label{definition_minimizeur_du_primal}
+    \frac{\mathrm{d}\hat \pi}{\mathrm{d}PQ}(x,y)
+    =
+    e^{\frac{\hat u(x)}{\alpha}}
+    e^{-\frac{\mathsf{c}(x,y)}{\alpha}}
+    e^{\frac{\hat v(y)}{\alpha}},
+  \end{IEEEeqnarray}
+  where $(\hat u,\hat v)$ is any pair of maximizing potentials for problem \eqref{dual_maversion_fonctionnelle_C} satisfying \eqref{transform_pour_u} and \eqref{transform_pour_v}.
+\end{theorem}
+The proof is detailed in Appendix \ref{app:proofs}.
+
+The uniqueness of the primal minimizer naturally implies the uniqueness of the dual maximizer pair that simultaneously satisfies \eqref{transform_pour_u} and \eqref{transform_pour_v}.
+
+\begin{corollary}
+  \label{corollaire_unicite_des_potentiels_normalises}
+  There exists a unique pair of functions $(u,v) \in \operatorname{L}^\infty(\mathcal X)\times \operatorname{L}^\infty(\mathcal{Y})$ satisfying \eqref{transform_pour_u} and \eqref{transform_pour_v} simultaneously.
+\end{corollary}
+The proof is detailed in Appendix \ref{app:proofs}.
+
+\subsection{Approximation Error Bounds}
+\label{sec:approx_error}
+In this section, we analyze the behavior of the regularized solution when varying the parameters $\alpha$ and $\beta$. A crucial aspect of this regularized formulation is the implicit constraint imposed by the reference measure $Q$. Because of the presence of the Kullback-Leibler divergence with respect to $Q$, the second marginal of the solution to the regularized problem is constrained to share the support of $Q$. Consequently, convergence to a minimizer of the unregularized semi-relaxed problem is only possible if there exists such a minimizer whose second marginal is absolutely continuous with respect to $Q$. This highlights the importance of carefully selecting the reference measure $Q$ in practice \cite{dimarino2020optimal}.
+
+\subsection{Iterative Algorithms and Convergence}
+
+\subsubsection{Presentation of the Algorithms}
+Similar to the classical Sinkhorn algorithm, our approach relies on alternating maximization. The specific choice of the updates via $\Phi$ and $\Psi$ is motivated by their construction: these operators automatically yield potentials that satisfy the normalization constraint. This guarantees that the associated measure is directly a probability distribution, avoiding the need for an integral normalization factor at each iteration.
+
+\begin{algorithm}[ht]
+  \label{algo_1_unscaled}
+  \caption{Unscaled iterative procedure}
+  Let $v^{(0)}$ be in $\operatorname{L}^\infty(\mathcal{Y})$.
+  \begin{subequations}
+      \label{equations_algo_1}
+    \begin{IEEEeqnarray}{rCl}
+          &&u^{(l+1)} = \Phi(v^{(l)}); \\
+          &&v^{(l+1)} = \Psi(u^{(l+1)}),
+    \end{IEEEeqnarray}
+    where $\Phi$ is in \eqref{formule_de_phi} and $\Psi$ is in \eqref{formule_de_psi}.
+  \end{subequations}
+\end{algorithm}
+
+Compared to the procedure proposed by \cite{chizat2018scaling} in Equation~3.6, our operator $\Psi$ includes an additional normalization constant (the first term in \eqref{formule_de_psi}). While this term requires computation, it provides significantly better theoretical stability and convergence guarantees, which also translates to improved robustness in numerical implementations.
+
+\begin{algorithm}[ht]
+  \label{algo_2_scaled}
+  \caption{Scaled iterative procedure}
+  Let $b^{(0)}\in \operatorname{L}^\infty(\mathcal Y)$ be equal to $1$, and for all $l \in \mathbb{N}$, let the following terms of the sequence be defined as 
+  \begin{subequations}
+      \label{equations_algo_2}
+    \begin{IEEEeqnarray}{rCl}
+          \label{scaled_update_1}
+          &&a^{(l+1)} = \Xi\left(b^{(l)} \right); \\ \label{scaled_update_2}
+          && v^{(l+1)} = \Gamma\left(a^{(l+1)} \right),
+    \end{IEEEeqnarray}
+      \end{subequations}
+    where the operators $\Xi : \operatorname{L}^\infty(\mathcal{Y})\to \operatorname{L}^\infty(\mathcal X)$ and $\Gamma : \operatorname{L}^\infty(\mathcal{X})\to \operatorname{L}^\infty(\mathcal Y)$ are defined by 
+    \begin{IEEEeqnarray}{rCl}
+      \label{formule_xi}
+      \Xi(b)(x) &\triangleq& \frac{1}{\int_{\mathcal Y} b(y)e^{-\frac{\mathsf{c}(x,y)}{\alpha}}\mathrm{d}Q(y)}; \\ \nonumber
+        \Gamma(a)(y) &\triangleq& \left(\frac{1}{\int_{\mathcal X} a(x)e^{-\frac{\mathsf{c}(x,y)}{\alpha}}\mathrm{d}P(x)} \right)^{\frac{\beta}{\alpha+\beta}} \\ \label{formule_gamma} &&\times \left(\int_{\mathcal Y}\left(\int_{\mathcal X}a(x)e^{\frac{-\mathsf{c}(x,y')}{\alpha}}\mathrm{d}P(x)\right)^{\frac{\alpha}{\alpha+\beta}}\mathrm{d}Q(y') \right)^{\frac{\beta}{\alpha}}.
+    \end{IEEEeqnarray}
+\end{algorithm}
+
+\subsubsection{Theoretical Guarantees}
+In the more classical unbalanced Sinkhorn setting with two relaxed marginals \cite[Theorem~3.11]{chizat2018scaling}, a linear rate of convergence can be obtained by viewing each scaling update as an order-preserving map that is $z$-homogeneous (with $0<z<1$) and therefore strictly contractive in the Thompson metric \cite[Definition~3.10]{chizat2018scaling}. In this semi-relaxed setting, however, the scaled updates exhibit a global renormalization in \eqref{formule_de_psi} that destroys the required homogeneity structure in Thompson's geometry. More precisely, with the Gibbs kernel $e^{-c(x,y)/\alpha}$, the first update in \eqref{scaled_update_1} is the analogue of the hard marginal projection: it is order-reversing and $(-1)$-homogeneous, hence non-expansive (in fact $1$-Lipschitz) in projective metrics. The second update in \eqref{scaled_update_2} involves a normalization factor that depends on the current iterate but is constant with respect to the spatial variable. This global rescaling is precisely what prevents the update from being $z$-homogeneous with $z\in(0,1)$ in the sense required by the Thompson contraction argument. By contrast, the Hilbert projective metric is invariant under multiplication by positive scalars, so such global renormalizations are invisible at the level of distances \cite[Lemma~2.1(iv)]{Lemmens2013BirkhoffsVO}. This makes the Hilbert geometry the natural framework for the scaled scheme.
+
+\begin{definition}[Hilbert metric]
+  \label{definition_hilbert_metric}
+  Let $\operatorname{L}^\infty_{++}(\mathcal X)$ be the subset of $\operatorname{L}^\infty(\mathcal X)$ defined by 
+  \begin{IEEEeqnarray}{rCl}
+    \label{set_L_infty_plusplus}
+    \operatorname{L}^\infty_{++}(\mathcal X)\triangleq\{a\in \operatorname{L}^\infty(\mathcal X):\inf_{x\in\mathcal X} a(x)>0\}
+  \end{IEEEeqnarray}
+   and similarly for $\operatorname{L}^\infty_{++}(\mathcal Y)$. Given two functions $f,g\in \operatorname{L}^\infty_{++}(\mathcal Y)$, Hilbert's projective metric is given by
+  \begin{IEEEeqnarray}{rCl}
+    \label{hilbert_metric}
+    &&d_{\mathrm H}(f,g)
+    \triangleq
+    \log\!\left(\frac{M(f/g)}{m(f/g)}\right), \\ \text{where }
+    &&M(f/g)\triangleq \sup_{y\in\mathcal Y}\frac{f(y)}{g(y)},
+    \text{ and }
+    m(f/g)\triangleq \inf_{y\in\mathcal Y}\frac{f(y)}{g(y)},
+  \end{IEEEeqnarray}
+  which is exactly Birkhoff's version of Hilbert's metric on cones \cite[Equation~(2.2)]{Lemmens2013BirkhoffsVO}.
+\end{definition}
+
+\begin{theorem}
+  \label{theoreme_linear_rate_scaled_hilbert}
+  Let $\hat u$ and $\hat v$ be the unique maximizers for problem \eqref{dual_maversion_fonctionnelle_C} that satisfy \eqref{transform_pour_u} and \eqref{transform_pour_v} simultaneously, and define the associated scaled potentials
+  \begin{IEEEeqnarray}{rCl}
+    \hat a = \exp\!\left(\frac{\hat u}{\alpha}\right),
+    \qquad
+    \hat b = \exp\!\left(\frac{\hat v}{\alpha}\right).
+  \end{IEEEeqnarray}
+  Then, the scaled iterates defined in Algorithm~\ref{algo_2_scaled} converge to these scaled potentials at a linear rate: for all $l\ge 0$,
+  \begin{IEEEeqnarray}{rCl}
+    \label{linear_speed_1}
+    d_{\mathrm H}\!\left(b^{(l)},\hat b\right)
+    &\leq&
+    \rho_{(\mathsf{c},\alpha,\beta)}^{\,l}\, d_{\mathrm H}\!\left(b^{(0)},\hat b\right),
+    \\
+    \label{linear_speed_2}
+    d_{\mathrm H}\!\left(a^{(l+1)},\hat a\right)
+    &\leq&
+    \tanh\!\left(\frac{\|c\|_\infty}{\alpha}\right)\rho_{(\mathsf{c},\alpha,\beta)}^{\,l}\, d_{\mathrm H}\!\left(b^{(0)},\hat b\right),
+  \end{IEEEeqnarray}
+  where $d_{\mathrm H}$ is the Hilbert metric in Definition~\ref{definition_hilbert_metric} and
+  \begin{IEEEeqnarray}{rCl}
+    \label{formule_rho}
+    \rho_{(\mathsf{c},\alpha,\beta)}
+    \triangleq
+    \frac{\beta}{\alpha+\beta}\tanh\!\left(\frac{\|c\|_\infty}{\alpha}\right)^{\!2}.
+  \end{IEEEeqnarray}
+\end{theorem}
+The proof is detailed in Appendix \ref{app:proofs}.
+
+Having established the convergence of the scaled potentials, we can deduce the uniform convergence of the non-scaled iterates.
+
+\begin{corollary}
+  The non-scaled iterates $(u^{(l)},v^{(l)})$ defined in Algorithm~\ref{algo_1_unscaled} converge uniformly to $(\hat u,\hat v)$, the unique pair of maximizers for problem \eqref{dual_maversion_fonctionnelle_C} that satisfy \eqref{transform_pour_u} and \eqref{transform_pour_v} simultaneously, at a linear rate: for all $l\ge 0$,
+  \begin{IEEEeqnarray}{rCl}
+    \label{convergence_norme_infinie_linear_v}
+    \|v^{(l)} - \hat v\|_\infty
+    &\leq&
+    \alpha \rho_{(\mathsf c,\alpha,\beta)}^{\,l}d_{\mathrm H}\!\left(b^{(0)},\hat b\right),
+    \\
+    \label{convergence_norme_infinie_linear_u}
+    \|u^{(l+1)} - \hat u\|_\infty
+    &\leq&
+    \alpha \rho_{(\mathsf c,\alpha,\beta)}^{\,l}d_{\mathrm H}\!\left(b^{(0)},\hat b\right).
+  \end{IEEEeqnarray}
+\end{corollary}
+The proof is detailed in Appendix \ref{app:proofs}.
+
+We now establish the linear convergence of the dual objective and the primal measures.
+
+\begin{corollary}
+  \label{corollaire_convergence_objectif}
+  Let $(u^{(l)},v^{(l)})_{l\geq 0}$ be the iterates defined by Algorithm~\ref{algo_1_unscaled}. The sequence $\bigl(\mathsf{D}(u^{(l)},v^{(l)})\bigr)_{l\geq 0}$ is non-decreasing and converges to $\mathsf{P}(\hat\pi)$ at a linear speed:
+  \begin{IEEEeqnarray}{rCl}
+    \label{borne_convergence_objectif}
+    0
+    \;\leq\;
+    \mathsf{P}(\hat\pi) - \mathsf{D}\!\left(u^{(l)},v^{(l)}\right)
+    \;\leq\;
+    4\alpha\,\rho_{(\mathsf{c},\alpha,\beta)}^{\,l}\,
+    d_{\mathrm{H}}\!\left(b^{(0)},\hat{b}\right),
+  \end{IEEEeqnarray}
+  where $\rho_{(\mathsf{c},\alpha,\beta)}$ is defined in \eqref{formule_rho} and $\hat{b}\triangleq e^{\hat{v}/\alpha}$.
+\end{corollary}
+The proof is detailed in Appendix \ref{app:proofs}.
+
+\begin{corollary}
+  \label{corollaire_convergence_mesure_primale}
+  Let $(u^{(l)},v^{(l)})_{l\geq 0}$ be the iterates defined by Algorithm~\ref{algo_1_unscaled}, and let $M\triangleq\max\!\bigl(2,\,3\tfrac{\beta+1}{\alpha+\beta}\bigr)$. For each $l\geq 0$, define the measure $\pi^{(l)}$ on $\mathcal{X}\times\mathcal{Y}$ through
+  \begin{IEEEeqnarray}{rCl}
+    \label{definition_iterate_primal}
+    \frac{\mathrm{d}\pi^{(l)}}{\mathrm{d}PQ}(x,y)
+    \;\triangleq\;
+    \exp\!\left(
+      \frac{u^{(l+1)}(x)+v^{(l)}(y)-\mathsf{c}(x,y)}{\alpha}
+    \right).
+  \end{IEEEeqnarray}
+  Then $\pi^{(l)}\in\Pi(P,\star)$ for all $l\geq 0$, and the sequence $\left(\mathrm{d}\pi^{(l)}/\mathrm{d}PQ\right)$ converges to $\mathrm{d}\hat\pi/\mathrm{d}PQ$ in $\operatorname{L}^\infty(\mathcal X \times \mathcal Y)$ at a linear speed, that is
+  \begin{IEEEeqnarray}{rCl}
+    \label{convergence_densite_primale}
+    \left\|
+      \frac{\mathrm{d}\pi^{(l)}}{\mathrm{d}PQ}
+      -
+      \frac{\mathrm{d}\hat\pi}{\mathrm{d}PQ}
+    \right\|_{\infty}
+    \;\leq\;
+    2\,e^{(2M+2)\|\mathsf{c}\|_\infty/\alpha}
+    \,\rho_{(\mathsf{c},\alpha,\beta)}^{\,l}\,
+    d_{\mathrm{H}}\!\left(b^{(0)},\hat{b}\right),
+  \end{IEEEeqnarray}
+  where $\rho_{(\mathsf{c},\alpha,\beta)}$ is defined in \eqref{formule_rho}. In particular, $\pi^{(l)}$ converges to $\hat\pi$ in total variation at the same linear rate.
+\end{corollary}
+The proof is detailed in Appendix \ref{app:proofs}.
+
+\section{Experiments}
+\label{sec:experiments}
+Experimental evaluation is reserved for future extensions.
+
+\section{Conclusion and Broader Impact}
+\label{sec:conclusion}
+We proposed a robust dual formulation and associated Sinkhorn-like algorithm for the semi-relaxed optimal transport problem. The proposed method avoids complex integral normalizations and exhibits linear convergence in both the dual potentials and the primal objective. Our analysis demonstrates that the structural characteristics of the semi-relaxed formulation permit strong theoretical guarantees without the restrictive finite space assumptions often employed. Future work will investigate the precise control of the approximation error with respect to the unregularized problem.
+
+\begin{ack}
+  This work was supported by INRIA and the French National Research Agency.
+\end{ack}
+
+\section*{References}
+\small
+
+[1] Chizat, L., Peyré, G., Schmitzer, B., \& Vialard, F.-X. (2018). Scaling algorithms for unbalanced optimal transport problems. \emph{Mathematics of Computation}, 87(314), 2563-2609.
+
+[2] Cuturi, M. (2013). Sinkhorn distances: Lightspeed computation of optimal transport. \emph{Advances in neural information processing systems}, 26.
+
+[3] Di Marino, S., \& Gerolin, A. (2020). Optimal transport losses and sinkhorn algorithm with general convex regularization. \emph{arXiv preprint arXiv:2007.00976}.
+
+[4] Lemmens, B., \& Nussbaum, R. (2013). Birkhoff's version of Hilbert's metric and its applications in analysis. \emph{Handbook of Hilbert Geometry}, 275-303.
+
+[5] Nussbaum, R. D. (2007). Fixed point theorems and Denjoy-Wolff theorems for Hilbert's projective metric in infinite dimensions. \emph{Topological Methods in Nonlinear Analysis}, 29(2), 199-249.
+
+[6] Rudin, W. (1987). \emph{Real and complex analysis}. Tata McGraw-hill education.
+
+[7] Luenberger, D. G. (1997). \emph{Optimization by vector space methods}. John Wiley \& Sons.
+
+[8] Brezis, H. (2010). \emph{Functional analysis, Sobolev spaces and partial differential equations}. Springer Science \& Business Media.
+
+[9] Rockafellar, R. T. (1997). \emph{Convex analysis} (Vol. 28). Princeton university press.
+
+[10] Z\u{a}linescu, C. (2002). \emph{Convex analysis in general vector spaces}. World Scientific.
+
+
+\appendix
+\section{Technical appendices and supplementary material}
+\label{app:proofs}
+
+This appendix contains the proofs of the theoretical results presented in the main text.
+
+\subsection{Proof of Lemma \ref{lemme_dualite_faible}}
+\begin{IEEEproof}
+  Let $\pi \in \Pi(P, \star)$ be any feasible measure for problem \eqref{primal_avec_2_KL}; in particular $\pi$ is absolutely continuous with respect to the product measure $PQ$ and $\pi_{\#}^{\mathcal X}= P$. Let $(u, v) \in \operatorname{L}^\infty(\mathcal X) \times \operatorname{L}^\infty(\mathcal Y)$ be arbitrary potentials. The Fenchel-Young inequality for the function $a\mapsto \alpha(a\log(a)-a+1)$ states 
+  \begin{IEEEeqnarray}{rCl}
+    \label{fenchel_pour_log}
+        \alpha(a\log(a)-a+1)\geq at -\alpha(e^{t/\alpha}-1) \geq at-e^{t/\alpha},
+  \end{IEEEeqnarray}
+  for all $t\in \mathbb{R}$ and $a>0$. Let $(x,y)$ be in $\mathcal X \times \mathcal Y$; applying the previous inequality with $a = \frac{\mathrm{d}\pi}{\mathrm{d}PQ}(x,y)$ and $t = u(x)+v(y)-\mathsf{c}(x,y)$ and integrating with respect to $PQ$ yields
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \alpha D_{\operatorname{KL}}(\pi || PQ) &\geq& \int_{\mathcal X \times \mathcal Y} (u(x) + v(y) - \mathsf{c}(x,y)) \mathrm{d}\pi(x,y)\\ && - \alpha \log\left(\int_{\mathcal X \times \mathcal Y} e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}} \mathrm{d}PQ(x,y)\right). \ \ \ \ \
+  \end{IEEEeqnarray}
+  Similarly, the following inequality can be deduced from \eqref{fenchel_pour_log}
+  \begin{IEEEeqnarray}{rCl}
+    \beta D_{\operatorname{KL}}(\pi_{\#}^{\mathcal Y} || Q) \geq \int_{\mathcal Y} -v(y) \mathrm{d}\pi_{\#}^{\mathcal Y}(y) - \beta \log\left(\int_{\mathcal Y} e^{-\frac{v(y)}{\beta}} \mathrm{d}Q(y)\right).
+  \end{IEEEeqnarray}
+  Addition of the primal cost term $\int \mathsf{c}(x,y) \mathrm{d}\pi(x,y)$ to the sum of these inequalities leads to
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \middlesqueezeequAggressive \mathsf{P}(\pi) &\geq& \middlesqueezeequBrutal \int_{\mathcal X \times \mathcal Y} (u(x) + v(y) - \mathsf{c}(x,y)) \mathrm{d}\pi(x,y) + \int_{\mathcal X \times \mathcal Y} \mathsf{c}(x,y) \mathrm{d}\pi(x,y) - \int_{\mathcal Y} v(y) \mathrm{d}\pi_{\#}^{\mathcal Y}(y) \\
+    && \middlesqueezeequAggressive -\alpha \log\left(\int_{\mathcal X \times \mathcal Y} e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}} \mathrm{d}PQ(x,y)\right) - \beta \log\left(\int_{\mathcal Y} e^{-\frac{v(y)}{\beta}} \mathrm{d}Q(y)\right).
+  \end{IEEEeqnarray}
+  The definition of the marginals and the constraint $\pi \in \Pi(P, \star)$ imply the identity
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal X \times \mathcal Y} (u(x) + v(y)) \mathrm{d}\pi(x,y) = \int_{\mathcal X} u(x) \mathrm{d}P(x) + \int_{\mathcal Y} v(y) \mathrm{d}\pi_{\#}^{\mathcal Y}(y).
+  \end{IEEEeqnarray}
+  Substitution of this identity into the previous expression results in the cancellation of terms involving $\mathsf{c}$ and $v$. The remaining terms satisfy
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \mathsf{P}(\pi) &\geq& \int_{\mathcal X} u(x) \mathrm{d}P(x) - \alpha \log\left(\int_{\mathcal X \times \mathcal Y} e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}} \mathrm{d}PQ(x,y)\right) \\ && - \beta \log\left(\int_{\mathcal Y} e^{-\frac{v(y)}{\beta}} \mathrm{d}Q(y)\right),
+  \end{IEEEeqnarray}
+  where the right-hand term is exactly $\mathsf{D}(u,v)$. This inequality holds for all $u, v$ and all feasible $\pi$, thus confirming $\sup \mathsf{D}(u,v) \leq \inf \mathsf{P}(\pi)$. Regarding the finiteness of the two values, note that from the fact that $\mathsf{c}$ is bounded and $PQ$ is in $\Pi(P,Q)$ and satisfies $D_{\operatorname{KL}}(PQ||PQ)=0$, it holds that $\mathsf{P}(PQ)<+\infty$.
+\end{IEEEproof}
+
+\subsection{Proof of Lemma \ref{lemme_propriete_de_ma_fonctionnelle_duale}}
+\begin{IEEEproof}
+  Let $u$ and $v$ be two functions in $\operatorname{L}^\infty(\mathcal X)$ and $\operatorname{L}^\infty(\mathcal{Y})$ respectively, and $M,N$ be two real numbers. From \eqref{dual_maversion_fonctionnelle_C}, it follows that
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \mathsf{D}(u+M,v) &=& \int_{\mathcal{X}} u(x)\mathrm{d}P(x) + M - \beta \log\left(\int_{\mathcal{Y}}e^{-\frac{v(y)}{\beta}}\mathrm{d}Q(y)\right) \\ &&-\alpha \log\left(e^{\frac{M}{\alpha}}\int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}PQ(x,y)\right) \\ \nonumber
+    &=&  \int_{\mathcal{X}} u(x)\mathrm{d}P(x) - \beta \log\left(\int_{\mathcal{Y}}e^{-\frac{v(y)}{\beta}}\mathrm{d}Q(y)\right) \\ &&-\alpha \log\left(\int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}PQ(x,y)\right).  \\
+    &=& \mathsf{D}(u,v),
+  \end{IEEEeqnarray}
+  which proves the first equality in \eqref{propriete_de_ma_foncionnelle_duale}. The same computation can be done to prove the second one, as follows
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \mathsf{D}(u,v+N) &=& \int_{\mathcal{X}} u(x)\mathrm{d}P(x) - \beta \log\left(e^{-\frac{N}{\beta}}\int_{\mathcal{Y}}e^{-\frac{v(y)}{\beta}}\mathrm{d}Q(y)\right) \\ &&-\alpha \log\left(e^{\frac{N}{\alpha}}\int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}PQ(x,y)\right) \\ \nonumber
+    &=&  \int_{\mathcal{X}} u(x)\mathrm{d}P(x) - \beta \log\left(\int_{\mathcal{Y}}e^{-\frac{v(y)}{\beta}}\mathrm{d}Q(y)\right) + N \\ &&-\alpha \log\left(\int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}PQ(x,y)\right) -N .  \\
+    &=& \mathsf{D}(u,v),
+  \end{IEEEeqnarray}
+  which concludes the proof of \eqref{propriete_de_ma_foncionnelle_duale}.
+\end{IEEEproof}
+
+\subsection{Proof of Lemma \ref{lemme_differentiation}}
+\begin{IEEEproof}
+The proof is split into two parts, establishing \eqref{differentiele_de_C_par_rapport_a_u} and \eqref{differentiele_de_C_par_rapport_a_v} respectively. Let $(u,v)$ be in $L^\infty(\mathcal{X}) \times L^\infty(\mathcal{Y})$, let $a$ be in $L^\infty(\mathcal{X})$, and let $b$ be in $L^\infty(\mathcal{Y})$. Since the functions $u,v,a,b$ are bounded, and $\exp$ is continuous, all subsequent differentiations under the integral sign are justified by the dominated convergence theorem \cite[Theorem~1.34]{rudin1987real}. Consider first the derivative with respect to $u$. The first term of the functional $\mathsf{D}$ in \eqref{dual_maversion_fonctionnelle_C} is linear with respect to $u$ and conributes
+\begin{IEEEeqnarray}{rCl}
+  \label{calcul_diff_par_parropr_u}
+  \left.\frac{\mathrm d}{\mathrm d t}\right|_{t=0}
+  \int_{\mathcal X} (u(x)+t a(x))\,\mathrm dP(x)
+  &=&
+  \int_{\mathcal X} a(x)\,\mathrm dP(x),
+\end{IEEEeqnarray}
+while the term $-\beta \log\!\big(\int_{\mathcal Y} e^{-v/\beta}\,\mathrm dQ\big)$ does not depend on $u$ and therefore yields zero when differentiated with respect to $u$. For the coupling term, differentiation gives
+\begin{IEEEeqnarray}{rCl}
+  \middlesqueezeequAggressive
+  \left.\frac{\mathrm d}{\mathrm d t}\right|_{t=0}
+  Z(u+ta,v)
+  &=&
+  \frac{1}{\alpha}
+  \int_{\mathcal{X}\times\mathcal{Y}}
+  a(x)\,
+  \exp\!\left(\frac{u(x)+v(y)-\mathsf D(x,y)}{\alpha}\right)
+  \,\mathrm dPQ(x,y). \ \
+\end{IEEEeqnarray}
+Applying the chain rule for the logarithm yields
+\begin{IEEEeqnarray}{rCl}
+  \nonumber
+  &&\left.\frac{\mathrm d}{\mathrm d t}\right|_{t=0}
+  \big(-\alpha \log Z(u+ta,v)\big)
+  \\ &&=
+  -\frac{1}{Z(u,v)}
+  \int_{\mathcal{X}\times\mathcal{Y}}
+  a(x)\,
+  \exp\!\left(\frac{u(x)+v(y)-\mathsf D(x,y)}{\alpha}\right)
+  \,\mathrm dPQ(x,y).
+\end{IEEEeqnarray}
+By Fubini's theorem \cite[Theorem~8.8]{rudin1987real}, this can be rewritten as
+\begin{IEEEeqnarray}{rCl}
+  \nonumber
+  \label{calcul_diff_par_rapport_a_u_preuve}
+  &&\left.\frac{\mathrm d}{\mathrm d t}\right|_{t=0}
+  \big(-\alpha \log Z(u+ta,v)\big)
+  \\ &&=
+  -\int_{\mathcal X}
+  a(x)
+  \left(
+    \frac{1}{Z(u,v)}
+    \int_{\mathcal Y}
+    \exp\!\left(\frac{u(x)+v(y)-\mathsf D(x,y)}{\alpha}\right)
+    \,\mathrm dQ(y)
+  \right)
+  \mathrm dP(x).
+\end{IEEEeqnarray}
+Combining \eqref{calcul_diff_par_parropr_u} and \eqref{calcul_diff_par_rapport_a_u_preuve} concludes the proof of \eqref{differentiele_de_C_par_rapport_a_u}. The differentiation with respect to $v$ is handled analogously. The term $\int_{\mathcal X} u\,\mathrm dP$ in \eqref{dual_maversion_fonctionnelle_C} does not depend on $v$. For the logarithmic term, differentiation yields
+\begin{IEEEeqnarray}{rCl}
+  \label{calcul_diff_par_rapport_a_v_1}
+  \left.\frac{\mathrm d}{\mathrm d t}\right|_{t=0}
+  \Bigg(
+    -\beta \log
+    \int_{\mathcal Y}
+    e^{-(v(y)+t b(y))/\beta}\,\mathrm dQ(y)
+  \Bigg) \middlesqueezeequAggressive
+  = \ \frac{1}{\int_{\mathcal Y} e^{-v/\beta}\,\mathrm dQ}
+  \int_{\mathcal Y}
+  b(y)\,e^{-v(y)/\beta}\,\mathrm dQ(y). \ \ \ \
+\end{IEEEeqnarray}
+The coupling term is handled analogously, by symmetry with respect to the variables $u$ and $v$, and the result is as follows 
+\begin{IEEEeqnarray}{rCl}
+  \nonumber
+  \label{calcul_diff_par_rapport_a_v_2}
+  &&\left.\frac{\mathrm d}{\mathrm d t}\right|_{t=0}
+  \big(-\alpha \log Z(u,v+tb)\big) \\ &&= 
+  -\int_{\mathcal Y}
+  b(y)
+  \left(
+    \frac{1}{Z(u,v)}
+    \int_{\mathcal X}
+    \exp\!\left(\frac{u(x)+v(y)-\mathsf D(x,y)}{\alpha}\right)
+    \,\mathrm dP(x)
+  \right)
+  \mathrm dQ(y).
+\end{IEEEeqnarray}
+Summing \eqref{calcul_diff_par_rapport_a_v_1} and \eqref{calcul_diff_par_rapport_a_v_2} concludes the proof of \eqref{differentiele_de_C_par_rapport_a_v}.
+\end{IEEEproof}
+
+\subsection{Proof of Corollary \ref{lemme_transform}}
+\begin{IEEEproof}
+The functional $\mathsf D$ is differentiable and concave on $L^\infty(\mathcal X)\times L^\infty(\mathcal Y)$, and in particular concave with respect to each variable when the other one is fixed. As a consequence, a sufficient condition for optimality is the vanishing of the first-order derivative \cite[Chapter~2.4]{convexanalysis}.
+
+Assume that $\hat v\in L^\infty(\mathcal Y)$ is fixed and that $\hat u$ satisfies \eqref{transform_pour_u}. By Lemma~\ref{lemme_differentiation}, the first-order derivative of the map $u\mapsto \mathsf D(u,\hat v)$ is given by \eqref{differentiele_de_C_par_rapport_a_u}. Injecting \eqref{transform_pour_u} into this expression shows that the derivative vanishes identically. By concavity, $\hat u$ therefore maximizes $u\mapsto \mathsf D(u,\hat v)$.
+
+Similarly, assume that $\hat u\in L^\infty(\mathcal X)$ is fixed and that $\hat v$ satisfies \eqref{transform_pour_v}. Using again Lemma~\ref{lemme_differentiation}, the derivative of $v\mapsto \mathsf D(\hat u,v)$ is given by \eqref{differentiele_de_C_par_rapport_a_v}. Injecting \eqref{transform_pour_v} into this expression yields the cancellation of the two terms and thus the vanishing of the derivative. By concavity, $\hat v$ maximizes $v\mapsto \mathsf D(\hat u,v)$.
+
+Finally, if \eqref{transform_pour_u} and \eqref{transform_pour_v} are satisfied simultaneously, then both partial derivatives vanish. Since $(u,v)\mapsto \mathsf D(u,v)$ is jointly concave, $(\hat u,\hat v)$ is a global maximizer of $\mathsf D$.
+\end{IEEEproof}
+
+\subsection{Proof of Lemma \ref{lemme_osc_inegalites}}
+\begin{IEEEproof}
+  The proof is divided in two parts, establishing \eqref{inegalite_osc_phi} and \eqref{inegalite_osc_psi} respectively. Let $v$ be a function in $\operatorname{L}^\infty(\mathcal{Y})$ and $(x,y)$ be in $\mathcal X  \times \mathcal Y$; the following inequalities are satisfied
+\begin{IEEEeqnarray}{rCl}
+  -\|c\|_\infty \leq & -\mathsf{c}(x,y)&  \leq \|c\|_\infty \\ 
+   e^{\frac{-\|c\|_\infty}{\alpha}}e^{\frac{v(y)}{\alpha}} \leq &  e^{\frac{v(y)-\mathsf{c}(x,y)}{\alpha}}  &\leq  e^{\frac{\|c\|_\infty}{\alpha}}e^{\frac{v(y)}{\alpha}} \\ \label{ligne_de_calcul_qui_sert_dans_2_preuves}
+    e^{\frac{-\|c\|_\infty}{\alpha}}\int_{\mathcal Y}e^{\frac{v(y)}{\alpha}} \mathrm{d}Q(y)\leq &  \int_{\mathcal Y} e^{\frac{v(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}Q(y) &\leq   e^{\frac{\|c\|_\infty}{\alpha}}\int_{\mathcal Y}e^{\frac{v(y)}{\alpha}}\mathrm{d}Q(y).
+\end{IEEEeqnarray}
+Taking the logarithm of the previous inequality and multiplying by $-\alpha$ yields
+\begin{IEEEeqnarray}{rCl}
+  \middlesqueezeequAggressive
+  -\alpha \log\left(\int_{\mathcal Y}e^{\frac{v(y)}{\alpha}}\mathrm{d}Q(y)\right) - \|c\|_\infty \leq \Phi(v)(x) \leq -\alpha \log\left(\int_{\mathcal Y}e^{\frac{v(y)}{\alpha}}\mathrm{d}Q(y)\right) + \|c\|_\infty,
+\end{IEEEeqnarray}
+from which it can be deduced that $\operatorname{osc}(\Phi(v))\leq 2\|c\|_\infty$, hence concluding the proof of \eqref{inegalite_osc_phi}.
+
+To establish \eqref{inegalite_osc_psi}, let $\Psi_1$ and $\Psi_2$ denote the first and second terms of $\Psi$ in \eqref{formule_de_psi}, respectively. Consider a function $u \in \operatorname{L}^\infty(\mathcal{X})$. The oscillation of the constant part $\Psi_1(u)$ is zero, which implies the identity $\operatorname{osc}(\Psi(u)) = \operatorname{osc}(\Psi_2(u))$ . Apart from the probability measure $P$ and the multiplicative factor $\frac{\beta}{\alpha+\beta}$, the functional form of $\Psi_2$ is symmetric to the definition of $\Phi$ in \eqref{formule_de_phi} . The proof of \eqref{inegalite_osc_phi} establishes that $\operatorname{osc}(\Phi(v)) \leq 2\|c\|_\infty$ . Adoption of an identical reasoning for $\Psi_2$ with its specific scaling leads to the following bound
+  \begin{IEEEeqnarray}{rCl}
+    \operatorname{osc}(\Psi(u)) \leq \frac{2\beta}{\alpha+\beta} \|c\|_\infty,
+  \end{IEEEeqnarray}
+which concludes the proof of \eqref{inegalite_osc_psi}.
+\end{IEEEproof}
+
+\subsection{Proof of Lemma \ref{lemme_controle_inegalites}}
+\begin{IEEEproof}
+  The proof is divided in two parts, establishing \eqref{inegalite_mon_dual_1} and \eqref{inegalite_mon_dual_2} respectively. Let $v$ be a function in $\operatorname{L}^\infty(\mathcal{Y})$ and $(x,y)$ be in $\mathcal X  \times \mathcal Y$; the following inequalities are satisfied
+  \begin{IEEEeqnarray}{rCl}
+    -\frac{\|v\|_\infty+\|c\|_\infty}{\alpha} \leq&\frac{v(y)-\mathsf{c}(x,y)}{\alpha} &\leq    \frac{\|v\|_\infty+\|c\|_\infty}{\alpha} \\
+    e^{-\frac{\|v\|_\infty+\|c\|_\infty}{\alpha}} &\leq e^{\frac{v(y)-\mathsf{c}(x,y)}{\alpha}} \leq &    e^{\frac{\|v\|_\infty+\|c\|_\infty}{\alpha}}.
+  \end{IEEEeqnarray}
+  Succesively integrating the previous inequalities with respect to $Q$, taking the logarithm and multiplying by $-\alpha$ concludes the proof of \eqref{inegalite_mon_dual_1}.
+
+  To establish \eqref{inegalite_mon_dual_2}, let $u$ be in $\operatorname{L}^\infty(\mathcal{X})$ and note that the definition of $\Psi$ in \eqref{formule_de_psi} implies 
+  \begin{IEEEeqnarray}{rCl}
+    \label{normalisation_pour_psi_app}
+    \int_{\mathcal Y} e^{-\Psi (u)(y) / \beta} \mathrm{d}Q(y) = 1.
+  \end{IEEEeqnarray}
+  As the measure $Q$ has total mass $1$, the previous equality implies 
+  \begin{IEEEeqnarray}{rCl}
+    \inf_{y \in \mathcal{Y}} e^{-\Psi(u)(y)/\beta} \leq 1, \text{ and  }\sup_{y \in \mathcal{Y}} e^{-\Psi(u)(y)/\beta} \geq 1.
+  \end{IEEEeqnarray}
+   Monotonicity of the logarithm function yields
+  \begin{IEEEeqnarray}{rCl}
+    \sup \Psi(u) \geq 0 \quad \text{and} \quad \inf \Psi(u) \leq 0.
+  \end{IEEEeqnarray}
+  The interval $[\inf \Psi(u), \sup \Psi(u)]$ contains the origin. The distance from the origin to any point within a closed interval is bounded through the total interval length. The following inequalities result from this inclusion
+  \begin{IEEEeqnarray}{rCl}
+    \sup \Psi(u) \leq \operatorname{osc}(\Psi(u)) \quad \text{and} \quad -\inf \Psi(u) \leq \operatorname{osc}(\Psi(u)).
+  \end{IEEEeqnarray}
+  The definition $\|\Psi(u)\|_\infty = \max(\sup \Psi(u), -\inf \Psi(u))$ establishes the bound $\|\Psi(u)\|_\infty \leq \operatorname{osc}(\Psi(u))$. Since the oscillation bound in \eqref{inegalite_osc_psi} is established as $\frac{2\beta}{\alpha+\beta} \|c\|_\infty$, this concludes the proof of \eqref{inegalite_mon_dual_2}.
+\end{IEEEproof}
+
+\subsection{Proof of Corollary \ref{corollaire_existence_de_mieux_bornes}}
+\begin{IEEEproof}
+  Let $(u,v)$ be a pair of functions in $\operatorname{L}^\infty(\mathcal X) \times \operatorname{L}^\infty(\mathcal{Y}) $. From Lemma \ref{lemme_osc_inegalites}, the function $\Phi(u)$ satisfies $\operatorname{osc}(\Phi(u))\leq 2 \|c\|_\infty$, where $\Phi$ is in \eqref{formule_de_phi}. Thus, there exists a constant $A \in \mathbb{R}$ such that $g \triangleq \Phi(u)+A$ satisfies
+  \begin{IEEEeqnarray}{rCl}
+    \label{g__________________________}
+    \|g\|_\infty\leq 2 \|c\|_\infty.
+  \end{IEEEeqnarray}
+  From Lemma \ref{lemme_propriete_de_ma_fonctionnelle_duale}, it holds that $\mathsf{D}(u,\Phi(u)) = \mathsf{D}(u,g)$, so it follows from Corollary \ref{lemme_transform} that 
+  \begin{IEEEeqnarray}{rCl}
+    \label{yczkduzedgzehdzehdez}
+    \mathsf{D}(u,v) \leq \mathsf{D}(u,\phi(u))=\mathsf{D}(u,g).    
+  \end{IEEEeqnarray}
+  Now let $f\triangleq \Psi(g)$, where $\Psi$ is in \eqref{formule_de_psi}. From Corollary \ref{lemme_transform}, the function $f$ satisfies
+  \begin{IEEEeqnarray}{rCl}
+    \label{fhgjkg}
+    \mathsf{D}(u,g)\leq\mathsf{D}(f,g).    
+  \end{IEEEeqnarray}
+  Moreover, from Lemma \ref{lemme_controle_inegalites}, $f$ also satisfies
+  \begin{IEEEeqnarray}{rCl}
+    \|f\|_\infty\leq \frac{\beta+1}{\alpha+\beta}(\|g\|_\infty + \|c\|_\infty).
+  \end{IEEEeqnarray}
+  Hence, combining the previous inequality with \eqref{g__________________________} yields 
+  \begin{IEEEeqnarray}{rCl}
+    \label{f_________}
+    \|f\|_\infty\leq 3\frac{\beta+1}{\alpha+\beta}\|c\|_\infty,
+  \end{IEEEeqnarray}
+  The combination of \eqref{g__________________________} and \eqref{f_________} ensures that $\|f\|_\infty, \|g\|_\infty \leq M\|c\|_\infty$ with $M = \max(2, 3\frac{\beta+1}{\alpha+\beta})$. This results in a pair $(f,g)$ satisfying $\mathsf{D}(u,v) \leq \mathsf{D}(f,g)$, from \eqref{yczkduzedgzehdzehdez} and \eqref{fhgjkg}, which concludes the proof.
+\end{IEEEproof}
+
+\subsection{Proof of Theorem 3.1}
+\begin{IEEEproof}
+  Let $(u_n)\subset \operatorname{L}^\infty(\mathcal X)$ and $(v_n)\subset \operatorname{L}^\infty(\mathcal{Y})$ be maximizing sequences. It follows from Corollary \ref{corollaire_existence_de_mieux_bornes} that $(u_n)$ and $(v_n)$ can be chosen such that for all $n$, it holds that $\|u_n\|_\infty,\|v_n\|_\infty \leq M \|c\|_\infty$, with $M = \max(2,3\frac{\beta+1}{\alpha+\beta})$. Application of the Banach-Alaoglu theorem \cite[Theorem~3.16]{brezissobolev} yields existence of subsequences $(u_{n_k})_k$ and $(v_{n_k})_k$ such that 
+  \begin{IEEEeqnarray}{rCl}
+      u_n \rightharpoonup^* \overline{u} \text{  in} \operatorname{L}^\infty(\mathcal X), \text{ and } v_n \rightharpoonup^* \overline{v} \text{  in} \operatorname{L}^\infty(\mathcal Y).
+  \end{IEEEeqnarray}
+  In particular, the following weak$*$ convergence also holds in $\operatorname{L}^\infty(\mathcal X \times \mathcal Y)$
+  \begin{IEEEeqnarray}{rCl}
+    u_n+v_n- \mathsf{c} \rightharpoonup^* \overline{u}+\overline{v}-\mathsf{c}.    
+  \end{IEEEeqnarray}
+  Thus, it follows from the convexity of $\exp$ and the weak$*$ lower semi-continuity of the integral functionals in the dual objective in \eqref{dual_maversion_fonctionnelle_C} (\cite[Theorem~3.7]{brezissobolev}) that
+  \begin{IEEEeqnarray}{rCl}
+    \liminf_{k\to\infty} \int_{\mathcal{Y}}e^{-\frac{v_{n_k}(y)}{\beta}}\mathrm{d}Q(y)&\geq& \int_{\mathcal{Y}}e^{-\frac{\overline{v}(y)}{\beta}}\mathrm{d}Q(y); \text{ and }\\
+    \middlesqueezeequAggressive
+        \liminf_{k\to\infty}\int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{u_{n_k}(x)+v_{n_k}(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}PQ(x,y) &\geq& \middlesqueezeequAggressive \int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{\overline{u}(x)+\overline{v}(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}PQ(x,y). \ \ \
+  \end{IEEEeqnarray}        
+  From the continuity and monotonicity of $\log$ on $(0,\infty)$ and the two previous inequalities, it follows that 
+  \begin{IEEEeqnarray}{rCl}
+    \label{i_1}
+    &&\liminf_{k\to\infty} \log\left(\int_{\mathcal{Y}}e^{-\frac{v_{n_k}(y)}{\beta}}\mathrm{d}Q(y)\right)\geq \log\left(\int_{\mathcal{Y}}e^{-\frac{\overline{v}(y)}{\beta}}\mathrm{d}Q(y)\right);  \text{ and }\\ \nonumber
+        &&\liminf_{k\to\infty}\log\left( \int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{u_{n_k}(x)+v_{n_k}(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}PQ(x,y)\right)  \\ \label{i_2}&& \hspace{5cm}\geq \middlesqueezeequBrutal \log\left(\int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{\overline{u}(x)+\overline{v}(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}PQ(x,y)\right). \ \ \
+  \end{IEEEeqnarray}  
+  From which it can be deduced that
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \middlesqueezeequAggressive
+    &&\sup_{u\in \operatorname{L}^\infty(\mathcal X), v \in \operatorname{L}^\infty(\mathcal{Y})}\ \mathsf{D}(u,v) \\ \nonumber  &=& \middlesqueezeequAggressive  \lim_{k\to\infty} \Bigg[\int_{\mathcal{X}} u_{n_k}(x)\mathrm{d}P(x) - \beta \log\left(\int_{\mathcal{Y}}e^{-\frac{v_{n_k}(y)}{\beta}}\mathrm{d}Q(y)\right) \\ && \middlesqueezeequAggressive -\alpha \log\left(\int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{u_{n_k}(x)+v_{n_k}(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}PQ(x,y)\right) \Bigg] \\ \nonumber \label{i_3}
+    &\leq& \lim_{k\to\infty} \Bigg[\int_{\mathcal{X}} u_{n_k}(x)\mathrm{d}P(x)\Bigg]  -\beta \liminf_{k\to\infty} \Bigg[\log\left(\int_{\mathcal{Y}}e^{-\frac{v_{n_k}(y)}{\beta}}\mathrm{d}Q(y)\right)\Bigg] \\ && \middlesqueezeequBrutal -\alpha \liminf_{k\to\infty} \Bigg[ \log\left(\int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{u_{n_k}(x)+v_{n_k}(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}PQ(x,y)\right) \Bigg].
+  \end{IEEEeqnarray}
+  It follows from the weak$*$ convergence of $(u_{n_k})$ to $\overline{u}$ that 
+  \begin{IEEEeqnarray}{rCl}
+    \lim_{k\to\infty} \Bigg[\int_{\mathcal{X}} u_{n_k}(x)\mathrm{d}P(x)\Bigg] =  \int_{\mathcal{X}} \overline{u}(x)\mathrm{d}P(x)   .
+  \end{IEEEeqnarray}
+  Combining \eqref{i_1}, \eqref{i_2}, \eqref{i_3} and the previous equality yields 
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \middlesqueezeequAggressive
+    \sup_{u\in \operatorname{L}^\infty(\mathcal X), v \in \operatorname{L}^\infty(\mathcal{Y})}\ \mathsf{D}(u,v) &\leq&\int_{\mathcal{X}} \overline{u}(x)\mathrm{d}P(x) - \beta\log\left(\int_{\mathcal{Y}}e^{-\frac{\overline{v}(y)}{\beta}}\mathrm{d}Q(y)\right)\\ && - \alpha \log\left(\int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{\overline{u}(x)+\overline{v}(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}PQ(x,y)\right),
+  \end{IEEEeqnarray}
+  or equivalently $\sup_{u\in \operatorname{L}^\infty(\mathcal X), v \in \operatorname{L}^\infty(\mathcal{Y})}\ \mathsf{D}(u,v) \leq \mathsf{D}(\overline{u},\overline{v})$, which concludes the proof.
+\end{IEEEproof}
+
+\subsection{Proof of Theorem \ref{theoreme_attainment_primal}}
+\begin{IEEEproof}
+  Let $(\hat u,\hat v) \in \operatorname{L}^\infty(\mathcal X)\times \operatorname{L}^\infty(\mathcal Y)$ be a pair of maximizing potentials for problem \eqref{dual_maversion_fonctionnelle_C} satisfying \eqref{transform_pour_u} and \eqref{transform_pour_v}. Define $\hat \pi$ as in \eqref{definition_minimizeur_du_primal}. Let $\hat \rho$ denote the density $\frac{\mathrm{d}\hat \pi}{\mathrm{d}PQ}$ and $\hat s$ denote the density $\frac{\mathrm{d}\hat \pi_{\#}^{\mathcal Y}}{\mathrm{d}Q}$. Condition \eqref{transform_pour_u} ensures that for all $x \in \mathcal X$, it holds that
+  \begin{IEEEeqnarray}{rCl}
+    \label{normalisation_1_ds_preuve}
+    \int_{\mathcal Y} \hat \rho (x,y)\mathrm{d}Q(y) = 1.
+  \end{IEEEeqnarray}
+  Thus, for any integrable function $f \in \operatorname{L}^1(\mathcal{X})$, Fubini's theorem \cite[Theorem~8.8]{rudin1987real} yields
+  \begin{IEEEeqnarray}{rCl}
+    \middlesqueezeequAggressive
+        \int_{\mathcal X \times \mathcal Y} f(x)\mathrm{d}\hat{\pi}(x,y) = \int_{\mathcal X} f(x)\left( \int_{\mathcal Y} \hat \rho (x,y)\mathrm{d}Q(y) \right) \mathrm{d}P(x) = \int_{\mathcal X} f(x)\mathrm{d}P(x).
+  \end{IEEEeqnarray}
+  Hence, the measure $\hat \pi$ is a probability measure with first marginal $\hat \pi_{\#}^{\mathcal X} = P$, which implies $\hat \pi \in \Pi(P, \star)$. Besides, the optimality condition \eqref{transform_pour_v} implies
+  \begin{IEEEeqnarray}{rCl}
+    \label{normalisation_2_ds_preuve}
+    \int_{\mathcal Y} e^{-\hat v(y) / \beta} \mathrm{d}Q(y) = 1, \text{ and } \hat s = e^{-\hat v / \beta}.
+  \end{IEEEeqnarray}
+    From \eqref{normalisation_1_ds_preuve} and \eqref{normalisation_2_ds_preuve}, the dual objective $\mathsf{D}(\hat u, \hat v)$, with $\mathsf{D}$ in \eqref{dual_maversion_fonctionnelle_C}, can be computed as follows 
+    \begin{IEEEeqnarray}{rCl}
+      \nonumber
+       \mathsf{D}(\hat u, \hat v) &=& \int_{\mathcal{X}} \hat u(x)\mathrm{d}P(x) - \beta \log\left(\int_{\mathcal{Y}}e^{-\frac{\hat v(y)}{\beta}}\mathrm{d}Q(y)\right) \\ &&-\alpha \log\left(\int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{\hat u(x)+\hat v(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}PQ(x,y)\right) \\ \label{dual_simplif_preuve}
+       &=& \int_{\mathcal{X}} \hat u(x)\mathrm{d}P(x) - \beta \log(1) -\alpha\log(1) = \int_{\mathcal{X}} \hat u(x)\mathrm{d}P(x).
+    \end{IEEEeqnarray}
+    From \eqref{primal_avec_2_KL}, the primal objective value at $\hat \pi$ is defined via
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \label{equation_de_p_dans_preuve}
+    \mathsf{P}(\hat{\pi}) &=& \int_{\mathcal X \times \mathcal Y} (\mathsf{c}(x,y) \hat \rho(x,y) + \alpha (\hat \rho(x,y) \log (\hat \rho(x,y)) - \hat \rho(x,y) + 1)) \mathrm{d}PQ(x,y) \\ && + \beta \int_{\mathcal Y} (\hat s(y) \log(\hat s(y)) - \hat  s(y) + 1) \mathrm{d}Q(y).
+  \end{IEEEeqnarray}
+  For all points $(x,y) \in \mathcal X \times \mathcal Y$, since $\hat \rho(x,y) = e^{\frac{\hat u (x) + \hat v(y)-\mathsf{c}(x,y)}{\alpha}}$, the pointwise Fenchel-Young equality \cite[Theorem~2.3.1]{convexanalysis} for the function $t\mapsto \alpha(t\log(t)-t+1)$ states
+  \begin{IEEEeqnarray}{rCl}
+    \middlesqueezeequBrutal
+    \alpha (\hat \rho(x,y)\log (\hat \rho(x,y))- \hat \rho(x,y)+ 1) = \hat \rho(x,y)(\hat u(x) + \hat v(y) - \mathsf{c}(x,y)) - \alpha (\hat \rho(x,y) - 1). \ \ \ \ \ \
+  \end{IEEEeqnarray}
+  Substitution into \eqref{equation_de_p_dans_preuve} leads to
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \mathsf{P}(\hat{\pi}) &=& \int_{\mathcal X \times \mathcal Y} \hat \rho(x,y)(\hat u(x) + \hat v(y)) \mathrm{d}PQ(x,y) - \int_{\mathcal X \times \mathcal Y} \alpha (\hat \rho(x,y) - 1) \mathrm{d}PQ(x,y) \\ && + \beta \int_{\mathcal Y} (\hat s(y) \log(\hat s(y)) - \hat  s(y) + 1) \mathrm{d}Q(y).
+  \end{IEEEeqnarray}
+  As $\hat \rho$ is a probability density, the intergral term $\int_{\mathcal X \times \mathcal Y} (\hat \rho(x,y) - 1) \mathrm{d}PQ(x,y)$ vanishes. Equation \eqref{normalisation_2_ds_preuve} provides the relation $\log(\hat s) = -\hat v / \beta$. Pointwise Fenchel-Young equality \cite[Theorem~2.3.1]{convexanalysis} for the second entropic term in \eqref{equation_de_p_dans_preuve} implies
+  \begin{IEEEeqnarray}{rCl}
+    \beta (\hat s(y)\log (\hat s(y))- \hat s(y)+ 1) = -\hat s(y)\hat v(y) - \beta (\hat s(y) - 1).
+  \end{IEEEeqnarray}
+  Linearity of the integral and Fubini's theorem \cite[Theorem~8.8]{rudin1987real} yield
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \mathsf{P}(\hat{\pi}) &=& \int_{\mathcal X} \hat u(x) \left( \int_{\mathcal Y} \hat \rho(x,y) \mathrm{d}Q(y) \right) \mathrm{d}P(x) + \int_{\mathcal Y} \hat v(y) \left( \int_{\mathcal X} \hat \rho(x,y) \mathrm{d}P(x) \right) \mathrm{d}Q(y) \\
+    && -\int_{\mathcal Y} \hat v(y)\hat s(y) \mathrm{d}Q(y) - \beta \int_{\mathcal Y} (\hat s(y) - 1) \mathrm{d}Q(y).
+  \end{IEEEeqnarray}
+  Definitions of the marginals $\hat \pi_{\#}^{\mathcal X}$ and $\hat \pi_{\#}^{\mathcal Y}$ coupled with identities \eqref{normalisation_1_ds_preuve} and \eqref{normalisation_2_ds_preuve} lead to
+  \begin{IEEEeqnarray}{rCl}
+    \mathsf{P}(\hat{\pi}) &=& \middlesqueezeequAggressive \int_{\mathcal X} \hat u(x) \mathrm{d}P(x) + \int_{\mathcal Y} \hat v(y)\hat s(y) \mathrm{d}Q(y) - \int_{\mathcal Y} \hat v(y)\hat s(y) \mathrm{d}Q(y) - \beta(1 - 1) \\ &=& \int_{\mathcal X} \hat u(x) \mathrm{d}P(x) = D(\hat{u}, \hat v),
+  \end{IEEEeqnarray}
+  where the last equality follows from \eqref{dual_simplif_preuve}. Therefore, from Lemma \ref{lemme_dualite_faible}, strong duality $\mathsf{P}(\hat{\pi}) = \mathsf{D}(\hat u, \hat v)$ holds and $\hat \pi$ is a minimizer for $\mathsf{P}$. Uniqueness of the minimizer $\hat \pi$ follows from the strict convexity of the Kullback-Leibler divergence on its support.
+\end{IEEEproof}
+
+\subsection{Proof of Corollary \ref{corollaire_unicite_des_potentiels_normalises}}
+\begin{IEEEproof}
+  Let $(u_1,v_1)$ and $(u_2,v_2)$ satisfy \eqref{transform_pour_u} and \eqref{transform_pour_v} simultaneously, that is
+\begin{IEEEeqnarray}{rCl}
+\label{eq:pair1}
+u_1 &=& \Phi(v_1), \qquad v_1 = \Psi(u_1),\\
+\label{eq:pair2}
+u_2 &=& \Phi(v_2), \qquad v_2 = \Psi(u_2),
+\end{IEEEeqnarray}
+Associate to each pair the coupling defined as follows
+\begin{IEEEeqnarray}{rCl}
+\label{eq:pi1_def}
+\pi_1(\mathrm dx,\mathrm dy)
+&\triangleq&
+\exp\!\left(\frac{u_1(x)+v_1(y)-\mathsf c(x,y)}{\alpha}\right)\,P(\mathrm dx)\,Q(\mathrm dy),\\
+\label{eq:pi2_def}
+\pi_2(\mathrm dx,\mathrm dy)
+&\triangleq&
+\exp\!\left(\frac{u_2(x)+v_2(y)-\mathsf c(x,y)}{\alpha}\right)\,P(\mathrm dx)\,Q(\mathrm dy).
+\end{IEEEeqnarray}
+From Theorem \ref{theoreme_attainment_primal}, \eqref{eq:pair1} and \eqref{eq:pair2}, $\pi_1$ and $\pi_2$ are primal minimizers. Uniqueness of the primal minimizer (Theorem \ref{theoreme_attainment_primal}) yields
+\begin{IEEEeqnarray}{rCl}
+\label{eq:pi_equal_unique}
+\pi_1 &=& \pi_2,
+\end{IEEEeqnarray}
+which, together with \eqref{eq:pi1_def} and \eqref{eq:pi2_def}, implies
+\begin{IEEEeqnarray}{rCl}
+\label{eq:exp_equal_unique}
+\exp\!\left(\frac{u_1(x)+v_1(y)-\mathsf c(x,y)}{\alpha}\right)
+&\eqas{PQ}&
+\exp\!\left(\frac{u_2(x)+v_2(y)-\mathsf c(x,y)}{\alpha}\right).
+\end{IEEEeqnarray}
+Taking logarithms in the previous equality gives
+\begin{IEEEeqnarray}{rCl}
+\label{eq:sum_equal_unique}
+u_1(x)+v_1(y) &\eqas{PQ}& u_2(x)+v_2(y).
+\end{IEEEeqnarray}
+Fix $y_0$ outside a $Q$-negligible set such that \eqref{eq:sum_equal_unique} holds for $P$-a.e.\ $x$.
+Then, for $P$-a.e.\ $x$,
+\begin{IEEEeqnarray}{rCl}
+\label{eq:u_diff_constant}
+u_1(x)-u_2(x) &=& v_2(y_0)-v_1(y_0) \eqas{P} K,
+\end{IEEEeqnarray}
+for the constant $K\triangleq v_2(y_0)-v_1(y_0)$.
+Insert \eqref{eq:u_diff_constant} into \eqref{eq:sum_equal_unique} to obtain, for $Q$-a.e.\ $y$,
+\begin{IEEEeqnarray}{rCl}
+\label{eq:v_diff_constant}
+v_2(y)-v_1(y) &=& K.
+\end{IEEEeqnarray}
+Finally, combining \eqref{eq:v_diff_constant} with the normalization \eqref{normalisation_pour_psi_app}, which follows from \eqref{eq:pair1} and \eqref{eq:pair2}, yields
+\begin{IEEEeqnarray}{rCl}
+\label{eq:K_zero}
+1
+&=&
+\int_{\mathcal Y}\exp\!\left(-\frac{v_2(y)}{\beta}\right)\,\mathrm dQ(y) \\
+&=&
+\int_{\mathcal Y}\exp\!\left(-\frac{v_1(y)+K}{\beta}\right)\,\mathrm dQ(y) \\
+&=&
+e^{-K/\beta}\int_{\mathcal Y}\exp\!\left(-\frac{v_1(y)}{\beta}\right)\,\mathrm dQ(y)
+=
+e^{-K/\beta},
+\end{IEEEeqnarray}
+which implies $K=0$, hence \eqref{eq:u_diff_constant} and \eqref{eq:v_diff_constant} yield
+\begin{IEEEeqnarray}{rCl}
+\label{eq:unique_pair_conclusion}
+u_1 \eqas{P} u_2, \qquad v_1 &\eqas{Q}& v_2.
+\end{IEEEeqnarray}
+This proves uniqueness of the pair satisfying \eqref{transform_pour_u} and \eqref{transform_pour_v}.
+\end{IEEEproof}
+
+\subsection{Proof of Theorem \ref{theoreme_linear_rate_scaled_hilbert}}
+\begin{IEEEproof}
+  The proof is organized as follows. First, two positive linear operators are introduced and their projective diameters shown to be are bounded. Theorem~2.9 in \cite{Lemmens2013BirkhoffsVO} then yields strict contractions in Hilbert's metric. Next, the operators $\Xi$ and $\Gamma$ are shown to be Lipschitz, and the one step map $\Gamma\circ\Xi$ is shown to be a strict contraction. Finally, the normalization built into $\Gamma$ identifies a complete slice of the positive cone, and the Banach fixed point theorem yields geometric convergence of the scaled iterates. The identification of the limit with the normalized maximizing potentials concludes the argument. Define the positive linear operators
+  \begin{IEEEeqnarray}{rCl}
+    &&\operatorname{K} : \operatorname{L}^\infty(\mathcal Y) \to \operatorname{L}^\infty(\mathcal X),
+    \qquad
+    (\operatorname{K}b)(x)
+    \triangleq
+    \int_{\mathcal Y} e^{-\frac{\mathsf c(x,y)}{\alpha}}\, b(y)\,\mathrm dQ(y),
+    \\[0.4em]
+    &&\operatorname{K}^{\mathsf T} : \operatorname{L}^\infty(\mathcal X) \to \operatorname{L}^\infty(\mathcal Y),
+    \qquad
+    (\operatorname{K}^{\mathsf T}a)(y)
+    \triangleq
+    \int_{\mathcal X} e^{-\frac{\mathsf c(x,y)}{\alpha}}\, a(x)\,\mathrm dP(x).
+  \end{IEEEeqnarray}
+  Since $\mathsf c$ is bounded, it holds for all $(x,y)\in\mathcal X\times\mathcal Y$ that
+  \begin{IEEEeqnarray}{rCl}
+    e^{-\frac{\|c\|_\infty}{\alpha}}
+    \;\leq\;
+    e^{-\frac{\mathsf c(x,y)}{\alpha}}
+    \;\leq\;
+    e^{\frac{\|c\|_\infty}{\alpha}}.
+  \end{IEEEeqnarray}
+  Hence, for every $b\in \operatorname{L}^\infty_+(\mathcal Y)\setminus\{0\}$ and every $x\in\mathcal X$,
+  \begin{IEEEeqnarray}{rCl}
+    e^{-\frac{\|c\|_\infty}{\alpha}}
+    \int_{\mathcal Y} b(y)\,\mathrm dQ(y)
+    \;\leq\;
+    (\operatorname{K}b)(x)
+    \;\leq\;
+    e^{\frac{\|c\|_\infty}{\alpha}}
+    \int_{\mathcal Y} b(y)\,\mathrm dQ(y).
+  \end{IEEEeqnarray}
+  Since $\int_{\mathcal Y} b(y)\,\mathrm dQ(y)>0$, this yields $\operatorname{K}b\in \operatorname{L}^\infty_{++}(\mathcal X)$. The same argument gives $\operatorname{K}^{\mathsf T}a\in \operatorname{L}^\infty_{++}(\mathcal Y)$ for every $a\in \operatorname{L}^\infty_+(\mathcal X)\setminus\{0\}$. If $b_1,b_2\in \operatorname{L}^\infty_+(\mathcal Y)\setminus\{0\}$, then for every $x\in\mathcal X$,
+  \begin{IEEEeqnarray}{rCl}
+    \frac{(\operatorname{K}b_1)(x)}{(\operatorname{K}b_2)(x)}
+    &\leq&
+    e^{\frac{2\|c\|_\infty}{\alpha}}
+    \frac{\int_{\mathcal Y} b_1(y)\,\mathrm dQ(y)}{\int_{\mathcal Y} b_2(y)\,\mathrm dQ(y)},
+    \\
+    \frac{(\operatorname{K}b_1)(x)}{(\operatorname{K}b_2)(x)}
+    &\geq&
+    e^{-\frac{2\|c\|_\infty}{\alpha}}
+    \frac{\int_{\mathcal Y} b_1(y)\,\mathrm dQ(y)}{\int_{\mathcal Y} b_2(y)\,\mathrm dQ(y)}.
+  \end{IEEEeqnarray}
+  Taking the essential supremum and the essential infimum over $x\in\mathcal X$ yields
+  \begin{IEEEeqnarray}{rCl}
+    \label{ghiutyvdjebdjkhbejhvejvedl}
+    d_{\mathrm H}\!\left(\operatorname{K}b_1,\operatorname{K}b_2\right)
+    \;\leq\;
+    \frac{4\|c\|_\infty}{\alpha}.
+  \end{IEEEeqnarray}
+  Hence the projective diameter of $\operatorname{K}$ is finite, with
+  \begin{IEEEeqnarray}{rCl}
+    \Delta(\operatorname{K})\leq \frac{4\|c\|_\infty}{\alpha}.
+  \end{IEEEeqnarray}
+  The same argument yields
+  \begin{IEEEeqnarray}{rCl}
+    \Delta(\operatorname{K}^{\mathsf T})\leq \frac{4\|c\|_\infty}{\alpha}.
+  \end{IEEEeqnarray}
+  Since $\Delta(\operatorname{K})<+\infty$ and $\Delta(\operatorname{K}^{\mathsf T})<+\infty$, Theorem~2.9 in \cite{Lemmens2013BirkhoffsVO} applies to the linear maps
+  \begin{IEEEeqnarray}{rCl}
+\operatorname{K}:\operatorname{L}^\infty(\mathcal Y)\to \operatorname{L}^\infty(\mathcal X)
+\qquad\text{and}\qquad
+\operatorname{K}^{\mathsf T}:\operatorname{L}^\infty(\mathcal X)\to \operatorname{L}^\infty(\mathcal Y),
+    \end{IEEEeqnarray}
+with source and target cones $\operatorname{L}^\infty_+(\mathcal Y)$ and $\operatorname{L}^\infty_+(\mathcal X)$. It follows that $\operatorname{K}$ is a strict contraction, for Hilbert's metric, from the part $\operatorname{L}^\infty_{++}(\mathcal Y)$ of $\operatorname{L}^\infty_+(\mathcal Y)$ into the part $\operatorname{L}^\infty_{++}(\mathcal X)$ of $\operatorname{L}^\infty_+(\mathcal X)$, and that $\operatorname{K}^{\mathsf T}$ is a strict contraction, for Hilbert's metric, from $\operatorname{L}^\infty_{++}(\mathcal X)$ into $\operatorname{L}^\infty_{++}(\mathcal Y)$, with contraction factors $\tanh(\Delta(\operatorname{K})/4)$ and $\tanh(\Delta(\operatorname{K}^{\mathsf T})/4)$, respectively. Hence, for all $b_1,b_2\in \operatorname{L}^\infty_{++}(\mathcal Y)$ and all $a_1,a_2\in \operatorname{L}^\infty_{++}(\mathcal X)$, it holds that 
+  \begin{IEEEeqnarray}{rCl}
+    \label{inegalite_operateur_K}
+    \middlesqueezeequAggressive
+    d_{\mathrm H}\!\left(\operatorname{K}b_1,\operatorname{K}b_2\right)
+    &\leq& \middlesqueezeequAggressive
+    \tanh\!\left(\frac{\Delta(\operatorname{K})}{4}\right)\, d_{\mathrm H}(b_1,b_2)
+    \;\leq\;
+    \tanh\!\left(\frac{\|c\|_\infty}{\alpha}\right)\, d_{\mathrm H}(b_1,b_2),
+    \\[0.2em] \middlesqueezeequAggressive
+    \label{inegalite_operateur_K_T}
+    d_{\mathrm H}\!\left(\operatorname{K}^{\mathsf T}a_1,\operatorname{K}^{\mathsf T}a_2\right)
+    &\leq& \middlesqueezeequAggressive
+    \tanh\!\left(\frac{\Delta(\operatorname{K}^{\mathsf T})}{4}\right)\, d_{\mathrm H}(a_1,a_2)
+    \;\leq\;
+    \tanh\!\left(\frac{\|c\|_\infty}{\alpha}\right)\, d_{\mathrm H}(a_1,a_2).
+  \end{IEEEeqnarray}
+  The first scaled update satisfies
+  \begin{IEEEeqnarray}{rCl}
+    \Xi(b)(x)=\frac{1}{(\operatorname{K}b)(x)},
+  \end{IEEEeqnarray}
+  for every $b\in \operatorname{L}^\infty_{++}(\mathcal Y)$ and every $x\in\mathcal X$. Moreover, relation \eqref{hilbert_metric} implies that, for every pair $f,g$ in either $\operatorname{L}^\infty_{++}(\mathcal X)$ or $\operatorname{L}^\infty_{++}(\mathcal Y)$,
+  \begin{IEEEeqnarray}{rCl}
+    \label{isom_invers}
+    d_{\mathrm H}(f^{-1},g^{-1})=d_{\mathrm H}(f,g).
+  \end{IEEEeqnarray}
+  Consequently, for all $b_1,b_2\in \operatorname{L}^\infty_{++}(\mathcal Y)$,
+  \begin{IEEEeqnarray}{rCl}
+    d_{\mathrm H}\!\left(\Xi(b_1),\Xi(b_2)\right)
+    &=&
+    d_{\mathrm H}\!\left((\operatorname{K}b_1)^{-1},(\operatorname{K}b_2)^{-1}\right)
+    \\
+    &=&
+    d_{\mathrm H}\!\left(\operatorname{K}b_1,\operatorname{K}b_2\right)
+    \\ \label{combine_1}
+    &\leq&
+    \tanh\!\left(\frac{\|c\|_\infty}{\alpha}\right)\, d_{\mathrm H}(b_1,b_2).
+  \end{IEEEeqnarray}
+
+  Let $a\in \operatorname{L}^\infty_{++}(\mathcal X)$. The second scaled update can be written as
+  \begin{IEEEeqnarray}{rCl}
+    \Gamma(a)(y)
+    &=&
+    \left(\operatorname{K}^{\mathsf T}a(y)\right)^{-\frac{\beta}{\alpha+\beta}}
+    \left(\int_{\mathcal Y}\left(\operatorname{K}^{\mathsf T}a(y')\right)^{\frac{\alpha}{\alpha+\beta}}\,\mathrm dQ(y')\right)^{\frac{\beta}{\alpha}},
+  \end{IEEEeqnarray}
+  and $\Gamma(a)\in \operatorname{L}^\infty_{++}(\mathcal Y)$. The second factor is a positive scalar independent of $y$. Lemma~2.1(iv) in \cite{Lemmens2013BirkhoffsVO} therefore gives, for all $a_1,a_2\in \operatorname{L}^\infty_{++}(\mathcal X)$,
+  \begin{IEEEeqnarray}{rCl}
+    d_{\mathrm H}\!\left(\Gamma(a_1),\Gamma(a_2)\right)
+    &=&
+    d_{\mathrm H}\!\left(\big(\operatorname{K}^{\mathsf T}a_1\big)^{-\frac{\beta}{\alpha+\beta}},\big(\operatorname{K}^{\mathsf T}a_2\big)^{-\frac{\beta}{\alpha+\beta}}\right).
+  \end{IEEEeqnarray}
+  The map $f\mapsto f^{\frac{\beta}{\alpha+\beta}}$ is order-preserving and homogeneous of degree $\frac{\beta}{\alpha+\beta}$. Proposition~2.6 in \cite{Lemmens2013BirkhoffsVO} then implies
+  \begin{IEEEeqnarray}{rCl}
+    d_{\mathrm H}\!\left(f^{\frac{\beta}{\alpha+\beta}},g^{\frac{\beta}{\alpha+\beta}}\right)
+    \;\leq\;
+    \frac{\beta}{\alpha+\beta}\, d_{\mathrm H}(f,g)
+  \end{IEEEeqnarray}
+  for all $f,g\in \operatorname{L}^\infty_{++}(\mathcal Y)$. Together with \eqref{isom_invers}, this yields
+  \begin{IEEEeqnarray}{rCl}
+    d_{\mathrm H}\!\left(\Gamma(a_1),\Gamma(a_2)\right)
+    &\leq&
+    \frac{\beta}{\alpha+\beta}\, d_{\mathrm H}\!\left(\operatorname{K}^{\mathsf T}a_1,\operatorname{K}^{\mathsf T}a_2\right)
+    \\ \label{combine_2}
+    &\leq&
+    \frac{\beta}{\alpha+\beta}\tanh\!\left(\frac{\|c\|_\infty}{\alpha}\right)\, d_{\mathrm H}(a_1,a_2).
+  \end{IEEEeqnarray}
+  Combining \eqref{combine_1} and \eqref{combine_2} shows that the one step map $T\triangleq \Gamma\circ\Xi$ satisfies, for all $b_1,b_2\in \operatorname{L}^\infty_{++}(\mathcal Y)$,
+  \begin{IEEEeqnarray}{rCl}
+    \label{dtryuioghjfhgjklgvhjkbkkjh}
+    d_{\mathrm H}\!\left(T(b_1),T(b_2)\right)
+    &\leq&
+    \frac{\beta}{\alpha+\beta}\tanh\!\left(\frac{\|c\|_\infty}{\alpha}\right)^{\!2}\, d_{\mathrm H}(b_1,b_2).
+  \end{IEEEeqnarray}
+
+  It remains to identify a complete metric space left invariant under $T$. For every $a\in \operatorname{L}^\infty_{++}(\mathcal X)$ and every $y\in\mathcal Y$,
+  \begin{IEEEeqnarray}{rCl}
+    \Gamma(a)(y)^{-\alpha/\beta}
+    &=&
+    \frac{\left(\operatorname{K}^{\mathsf T}a(y)\right)^{\frac{\alpha}{\alpha+\beta}}}
+    {\int_{\mathcal Y}\left(\operatorname{K}^{\mathsf T}a(y')\right)^{\frac{\alpha}{\alpha+\beta}}\,\mathrm dQ(y')}.
+  \end{IEEEeqnarray}
+  Integration with respect to $Q$ yields
+  \begin{IEEEeqnarray}{rCl}
+    \label{uyiytfuihjuyttyfytrtrrrrrrrtrtrtrtrtrtr}
+    \int_{\mathcal Y}\Gamma(a)(y)^{-\alpha/\beta}\,\mathrm dQ(y)
+    &=&
+    1.
+  \end{IEEEeqnarray}
+  Hence every iterate $b^{(l)}$ belongs to
+  \begin{IEEEeqnarray}{rCl}
+    \label{formule_de_sigma}
+    \Sigma
+    \triangleq
+    \left\{
+      b\in \operatorname{L}^\infty_{++}(\mathcal Y):
+      \int_{\mathcal Y} b(y)^{-\alpha/\beta}\,\mathrm dQ(y)=1
+    \right\}.
+  \end{IEEEeqnarray}
+  Consider
+  \begin{IEEEeqnarray}{rCl}
+    q(b)
+    \triangleq
+    \left(\int_{\mathcal Y} b(y)^{-\alpha/\beta}\,\mathrm dQ(y)\right)^{-\beta/\alpha}.
+  \end{IEEEeqnarray}
+  This map is homogeneous of degree $1$. It is also continuous on $\operatorname{L}^\infty_{++}(\mathcal Y)$ for the $\operatorname{L}^\infty$ norm. Indeed, let $b$ be in $\operatorname{L}^\infty_{++}(\mathcal Y)$ and $(b_n)_{n\geq 1}$ be a sequence in $\operatorname{L}^\infty_{++}(\mathcal Y)$ such that $b_n\to b$ in $\operatorname{L}^\infty(\mathcal Y)$, and set
+  \begin{IEEEeqnarray}{rCl}
+    m_b \triangleq \operatorname*{ess\,inf}_{Q} b >0.
+  \end{IEEEeqnarray}
+  There exists $n_0\in\mathbb N$ such that $b_n(y)\geq m_b/2$ for $Q$-almost every $y\in\mathcal Y$ and every $n\geq n_0$. The map $t\mapsto t^{-\alpha/\beta}$ is Lipschitz on $[m_b/2,+\infty)$, hence
+  \begin{IEEEeqnarray}{rCl}
+    \left\|b_n^{-\alpha/\beta}-b^{-\alpha/\beta}\right\|_\infty \xrightarrow[n\to+\infty]{} 0.
+  \end{IEEEeqnarray}
+  Therefore
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal Y} b_n(y)^{-\alpha/\beta}\,\mathrm dQ(y)
+    \xrightarrow[n\to+\infty]{}
+    \int_{\mathcal Y} b(y)^{-\alpha/\beta}\,\mathrm dQ(y),
+  \end{IEEEeqnarray}
+  and then $q(b_n)\to q(b)$. The cone $\operatorname{L}^\infty_+(\mathcal Y)$ is closed and normal in the Banach space $\operatorname{L}^\infty(\mathcal Y)$, and $\operatorname{L}^\infty_{++}(\mathcal Y)$ is the part containing the constant function $1$. Lemma~2.1 in \cite{nussbaum2007fixed}, applied with the constant function $1$, yields that $(\Sigma,d_{\mathrm H})$ is a complete metric space. Since $b^{(0)}\equiv 1$ belongs to $\Sigma$ and $T(\Sigma)\subset \Sigma$ follows from \eqref{uyiytfuihjuyttyfytrtrrrrrrrtrtrtrtrtrtr}, the Banach fixed point theorem implies the existence of a unique fixed point $\hat b\in\Sigma$ and gives, for all $l\geq 0$,
+  \begin{IEEEeqnarray}{rCl}
+    d_{\mathrm H}\!\left(b^{(l)},\hat b\right)
+    &\leq&
+    \left(
+      \frac{\beta}{\alpha+\beta}\tanh\!\left(\frac{\|c\|_\infty}{\alpha}\right)^{\!2}
+    \right)^{l}
+    d_{\mathrm H}\!\left(b^{(0)},\hat b\right),
+  \end{IEEEeqnarray}
+  which is exactly \eqref{linear_speed_1}. Define
+  \begin{IEEEeqnarray}{rCl}
+    \hat a \triangleq \Xi(\hat b).
+  \end{IEEEeqnarray}
+  Then, for every $l\geq 1$,
+  \begin{IEEEeqnarray}{rCl}
+    d_{\mathrm H}\!\left(a^{(l)},\hat a\right)
+    &=&
+    d_{\mathrm H}\!\left(\Xi(b^{(l-1)}),\Xi(\hat b)\right)
+    \\
+    &\leq&
+    \tanh\!\left(\frac{\|c\|_\infty}{\alpha}\right)\, d_{\mathrm H}\!\left(b^{(l-1)},\hat b\right)
+    \\
+    &\leq&
+    \tanh\!\left(\frac{\|c\|_\infty}{\alpha}\right)\rho_{(\mathsf c,\alpha,\beta)}^{\,l-1}\, d_{\mathrm H}\!\left(b^{(0)},\hat b\right),
+  \end{IEEEeqnarray}
+  which is exactly \eqref{linear_speed_2}.
+
+  Finally, define
+  \begin{IEEEeqnarray}{rCl}
+    \hat u \triangleq \alpha \log(\hat a)\in \operatorname{L}^\infty(\mathcal X),
+    \qquad
+    \hat v \triangleq \alpha \log(\hat b)\in \operatorname{L}^\infty(\mathcal Y).
+  \end{IEEEeqnarray}
+  The fixed point relation $T(\hat b)=\hat b$ and the definition $\hat a=\Xi(\hat b)$ are equivalent to
+  \begin{IEEEeqnarray}{rCl}
+    \hat u=\Phi(\hat v),
+    \qquad
+    \hat v=\Psi(\hat u),
+  \end{IEEEeqnarray}
+  where $\Phi$ and $\Psi$ are defined in \eqref{formule_de_phi} and \eqref{formule_de_psi}. Corollary~\ref{lemme_transform} and Corollary~\ref{corollaire_unicite_des_potentiels_normalises} then imply that $\hat u$ and $\hat v$ are the unique maximizers for problem \eqref{dual_maversion_fonctionnelle_C} that satisfy \eqref{transform_pour_u} and \eqref{transform_pour_v} simultaneously. Therefore, $\hat a$ and $\hat b$ are the associated unique scaled maximizing potentials.
+\end{IEEEproof}
+
+\subsection{Proof of Corollary 3.4}
+\begin{IEEEproof}
+  The proof is split into three parts; the first one deals with \eqref{convergence_norme_infinie_linear_v}, the second one with \eqref{convergence_norme_infinie_linear_u}, and the third one with \eqref{convergence_densite_primale}. Let $(u^{(l)},v^{(l)})$ be the unscaled iterates defined by Algorithm~\ref{algo_1_unscaled}, $(a^{(l)},b^{(l)})$ be the scaled iterates defined by Algorithm~\ref{algo_2_scaled}, and $(\hat u,\hat v)$ be the unique pair of maximizers satisfying \eqref{transform_pour_u} and \eqref{transform_pour_v} simultaneously. Recall that the two parametrizations are linked through
+  \begin{IEEEeqnarray}{rCl}
+    u^{(l)} = \alpha \log\!\big(a^{(l)}\big),
+    \qquad
+    v^{(l)} = \alpha \log\!\big(b^{(l)}\big).
+  \end{IEEEeqnarray}
+  Hence, it holds that
+  \begin{IEEEeqnarray}{rCl}
+    \|v^{(l)}-\hat v\|_\infty
+    = \alpha \left\|\log\!\left(\frac{b^{(l)}}{\hat b}\right)\right\|_\infty.
+    \label{eq:vinf_log_ratio}
+  \end{IEEEeqnarray}
+  Define the pointwise ratio 
+  \begin{IEEEeqnarray}{rCl}
+    r^{(l)}(y) \triangleq \frac{b^{(l)}(y)}{\hat b(y)}, \qquad y\in\mathcal Y,
+  \end{IEEEeqnarray}
+  and its bounds
+  \begin{IEEEeqnarray}{rCl}
+    m^{(l)} \triangleq \inf_{y\in \mathcal Y}\, r^{(l)}(y),
+    \qquad
+    M^{(l)} \triangleq \sup_{y\in \mathcal Y}\, r^{(l)}(y).
+  \end{IEEEeqnarray}
+  By definition of Hilbert's projective metric on $\mathrm{L}^\infty_{++}(\mathcal Y)$ (Definition \ref{definition_hilbert_metric}), it holds that
+  \begin{IEEEeqnarray}{rCl}
+    d_{\mathrm H}\!\big(b^{(l)},\hat b\big)
+    = \log\!\left(\frac{M^{(l)}}{m^{(l)}}\right).
+    \label{eq:hilbert_ratio}
+  \end{IEEEeqnarray}
+  It remains to show that
+  \begin{IEEEeqnarray}{rCl}
+    m^{(l)} \le 1 \le M^{(l)}.
+    \label{eq:m1M}
+  \end{IEEEeqnarray}
+  Since the iterates $b^{(l)}$ are in $\Sigma$ for all $l$ and $\hat b\in\Sigma$, where $\Sigma$ is in \eqref{formule_de_sigma}, the same gauge constraint as in \eqref{uyiytfuihjuyttyfytrtrrrrrrrtrtrtrtrtrtr} holds
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal Y} \big(b^{(l)}(y)\big)^{-\alpha/\beta}\,\mathrm dQ(y)=1,
+    \qquad \mbox{and }
+    \int_{\mathcal Y} \big(\hat b(y)\big)^{-\alpha/\beta}\,\mathrm dQ(y)=1.
+    \label{eq:gauge_constraint_b}
+  \end{IEEEeqnarray}
+  The map $t\mapsto t^{-\alpha/\beta}$ is strictly decreasing on $(0,+\infty)$. Assume by contradiction that
+  $M^{(l)}<1$. Then $r^{(l)}(y)<1$ for $Q$-a.e.\ $y$, i.e., $b^{(l)}(y)<\hat b(y)$ for $Q$-a.e.\ $y$,
+  and the strict monotonicity of the integral implies
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal Y} \big(b^{(l)}(y)\big)^{-\alpha/\beta}\,\mathrm dQ(y)
+    >
+    \int_{\mathcal Y} \big(\hat b(y)\big)^{-\alpha/\beta}\,\mathrm dQ(y),
+  \end{IEEEeqnarray}
+  which contradicts \eqref{eq:gauge_constraint_b}. Therefore $M^{(l)}\ge 1$. The case $m^{(l)}>1$ is ruled out similarly. Thus, the inequalities in \eqref{eq:m1M} are established.  Combining \eqref{eq:m1M} with $\|\log r^{(l)}\|_\infty=\max\{-\log m^{(l)},\,\log M^{(l)}\}$ gives
+  \begin{IEEEeqnarray}{rCl}
+    \left\|\log\!\left(\frac{b^{(l)}}{\hat b}\right)\right\|_\infty
+    &=& \max\{-\log m^{(l)},\,\log M^{(l)}\} \\
+    &\le& \log\!\left(\frac{M^{(l)}}{m^{(l)}}\right) \\
+    &=& d_{\mathrm H}\!\big(b^{(l)},\hat b\big),
+    \label{eq:log_ratio_le_hilbert}
+  \end{IEEEeqnarray}
+  where the last equality follows from \eqref{eq:hilbert_ratio}. Plugging \eqref{eq:log_ratio_le_hilbert} into
+  \eqref{eq:vinf_log_ratio} yields
+  \begin{IEEEeqnarray}{rCl}
+    \|v^{(l)}-\hat v\|_\infty \le \alpha\, d_{\mathrm H}\!\big(b^{(l)},\hat b\big).
+  \end{IEEEeqnarray}
+  Combining the previous inequality with \eqref{linear_speed_1} concludes the proof of \eqref{convergence_norme_infinie_linear_v}. Regarding the proof of \eqref{convergence_norme_infinie_linear_u}, recall from Algorithm~\ref{algo_1_unscaled} that
+  \begin{IEEEeqnarray}{rCl}
+    u^{(l+1)} = \Phi\!\big(v^{(l)}\big),
+    \qquad \mbox{and }
+    \hat u = \Phi(\hat v),
+    \label{eq:u_update_phi}
+  \end{IEEEeqnarray}
+  where $\Phi$ is in \eqref{formule_de_phi}.  Let $v,w$ be in $\mathrm{L}^\infty(\mathcal Y)$ and set $\delta\triangleq\|v-w\|_\infty$. Then, for $Q$-a.e.\ $y$ in $\mathcal Y$, it holds that
+  \begin{IEEEeqnarray}{rCl}
+    -\delta \le v(y)-w(y)\le \delta
+    \quad\Longrightarrow\quad
+    e^{-\delta/\alpha}\le \exp\!\left(\frac{v(y)-w(y)}{\alpha}\right)\le e^{\delta/\alpha}.
+  \end{IEEEeqnarray}
+  Multiplying by $\exp\!\left(\frac{w(y)-\mathsf c(x,y)}{\alpha}\right)$ and integrating with respect to $Q$ yields,
+  for every $x\in\mathcal X$,
+  \begin{IEEEeqnarray}{rCl}
+    \middlesqueezeequAggressive
+    e^{-\delta/\alpha}
+    \!\!\int_{\mathcal Y}\!\exp\!\left(\frac{w(y)-\mathsf c(x,y)}{\alpha}\right)\,\mathrm dQ(y)
+    &\le& \middlesqueezeequAggressive
+    \int_{\mathcal Y}\!\exp\!\left(\frac{v(y)-\mathsf c(x,y)}{\alpha}\right)\,\mathrm dQ(y) \\
+    &\le& \middlesqueezeequAggressive
+    e^{\delta/\alpha}
+    \!\!\int_{\mathcal Y}\!\exp\!\left(\frac{w(y)-\mathsf c(x,y)}{\alpha}\right)\,\mathrm dQ(y). \ \ \ \ 
+  \end{IEEEeqnarray}
+  Applying $-\alpha$ times the logarithm to the previous inequalities yields, for every $x\in\mathcal X$,
+  \begin{IEEEeqnarray}{rCl}
+    \Phi(w)(x)-\delta \le \Phi(v)(x)\le \Phi(w)(x)+\delta,
+  \end{IEEEeqnarray}
+  hence
+  \begin{IEEEeqnarray}{rCl}
+    \|\Phi(v)-\Phi(w)\|_\infty \le \|v-w\|_\infty.
+    \label{eq:phi_1_lipschitz}
+  \end{IEEEeqnarray}
+  Combining \eqref{eq:u_update_phi} with \eqref{eq:phi_1_lipschitz} yields
+  \begin{IEEEeqnarray}{rCl}
+    \|u^{(l+1)}-\hat u\|_\infty
+    = \|\Phi(v^{(l)})-\Phi(\hat v)\|_\infty
+    \le \|v^{(l)}-\hat v\|_\infty.
+  \end{IEEEeqnarray}
+  Together with \eqref{convergence_norme_infinie_linear_v}, this implies
+  \begin{IEEEeqnarray}{rCl}
+    \|u^{(l+1)}-\hat u\|_\infty
+    \le \alpha\, d_{\mathrm H}\!\big(b^{(l)},\hat b\big).
+  \end{IEEEeqnarray}
+  Finally, applying \eqref{linear_speed_1} concludes the proof of \eqref{convergence_norme_infinie_linear_u}.
+\end{IEEEproof}
+
+\subsection{Proof of Corollary \ref{corollaire_convergence_objectif}}
+\begin{IEEEproof}
+  From Corollary~\ref{lemme_transform}, each alternating maximization step
+  does not decrease the value of $\mathsf{D}$, hence
+  $\mathsf{D}(u^{(l)},v^{(l)})\leq\mathsf{D}(u^{(l+1)},v^{(l+1)})$ for
+  all $l\geq 0$.  Strong duality, established in
+  Theorem~\ref{theoreme_attainment_primal}, provides the left-hand inequality in \eqref{borne_convergence_objectif}. The right-hand inequality rests on the following observation: for any
+  measurable bounded functions $f$ and $g$ on a probability space
+  $(\Omega,\mu)$, it holds that
+  \begin{IEEEeqnarray}{rCl}
+    \label{log_integral_lipschitz}
+    \left|\log\!\int_\Omega\! e^{f(t)}\,\mathrm{d}\mu(t)
+    \;-\;
+    \log\!\int_\Omega\! e^{g(t)}\,\mathrm{d}\mu(t)\right|
+    \;\leq\;
+    \|f - g\|_\infty.
+  \end{IEEEeqnarray}
+  Indeed, $\int e^{f(t)}\,\mathrm{d}\mu(t)\leq e^{\|f-g\|_\infty}\!\int e^{g(t)}\,\mathrm{d}\mu(t)$,
+  from which it can be deduced that
+  \begin{IEEEeqnarray}{rCl}
+    \log\!\int_\Omega e^{f(t)}\,\mathrm{d}\mu(t)-\log\!\int_\Omega e^{g(t)}\,\mathrm{d}\mu(t)\leq\|f-g\|_\infty.
+  \end{IEEEeqnarray}
+  The reverse inequality is obtained symmetrically. From definition \eqref{dual_maversion_fonctionnelle_C}, the gap decomposes as
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \middlesqueezeequBrutal
+    \mathsf{D}(\hat{u},\hat{v})-\mathsf{D}(u^{(l)},v^{(l)})
+    &=&
+    \int_{\mathcal{X}}\!\bigl(\hat{u}-u^{(l)}\bigr)\,\mathrm{d}P\\
+    \nonumber
+    &&-\;\beta\!\left[\log\!\int_{\mathcal{Y}}\!e^{-\hat{v}(y)/\beta}\,\mathrm{d}Q(y)
+       \;-\;\log\!\int_{\mathcal{Y}}\!e^{-v^{(l)}(y)/\beta}\,\mathrm{d}Q(y)\right]\\
+    && \middlesqueezeequBrutal -\;\alpha\!\Bigg[
+      \log\!\int_{\mathcal{X}\times\mathcal{Y}}\!
+        e^{(\hat{u}(x)+\hat{v}(y)-\mathsf{c}(x,y))/\alpha}\,\mathrm{d}PQ(x,y) \nonumber \\
+      && \ \ \ \ \ \  \middlesqueezeequBrutal \;-\;     \label{decomposition_gap_objectif}
+      \log\!\int_{\mathcal{X}\times\mathcal{Y}}\!
+        e^{(u^{(l)}(x)+v^{(l)}(y)-\mathsf{c}(x,y))/\alpha}\,\mathrm{d}PQ(x,y)
+    \Bigg]\!.\ \ \ \
+  \end{IEEEeqnarray}
+  Applying \eqref{log_integral_lipschitz} to the second and third terms of
+  \eqref{decomposition_gap_objectif}, and using the fact that $P$ is a
+  probability measure for the first term, yields
+  \begin{IEEEeqnarray}{rCl}
+    \label{borne_gap_objectif_potentiels}
+    \mathsf{D}(\hat{u},\hat{v})-\mathsf{D}(u^{(l)},v^{(l)})
+    \;\leq\;
+    2\,\bigl\|\hat{u}-u^{(l)}\bigr\|_\infty
+    \;+\;
+    2\,\bigl\|\hat{v}-v^{(l)}\bigr\|_\infty.
+  \end{IEEEeqnarray}
+  Applying \eqref{convergence_norme_infinie_linear_u} and
+  \eqref{convergence_norme_infinie_linear_v} to the right-hand side of
+  \eqref{borne_gap_objectif_potentiels} concludes the proof.
+\end{IEEEproof}
+
+\subsection{Proof of Corollary \ref{corollaire_convergence_mesure_primale}}
+\begin{IEEEproof}
+  The proof establishes successively that $\pi^{(l)}$ is in $\Pi(P,\star)$, that
+  the relevant exponents are uniformly bounded, and that this bound combined
+  with the linear convergence of the potentials yields
+  \eqref{convergence_densite_primale}. Since $u^{(l+1)}=\Phi(v^{(l)})$ in Algorithm~\ref{algo_1_unscaled}, the definition \eqref{formule_de_phi} of $\Phi$ gives, for every $x\in\mathcal{X}$,
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \int_{\mathcal{Y}}
+      \frac{\mathrm{d}\pi^{(l)}}{\mathrm{d}PQ}(x,y)\,\mathrm{d}Q(y)
+    &=&
+    e^{u^{(l+1)}(x)/\alpha}
+    \int_{\mathcal{Y}}\!
+      e^{(v^{(l)}(y)-\mathsf{c}(x,y))/\alpha}\,\mathrm{d}Q(y)\\
+    &=&
+    e^{u^{(l+1)}(x)/\alpha}\cdot e^{-u^{(l+1)}(x)/\alpha}
+    \;=\; 1.
+  \end{IEEEeqnarray}
+  Fubini's theorem \cite[Theorem~8.8]{rudin1987real} then implies that
+  $\pi^{(l)}$ is a probability measure with first marginal
+  $(\pi^{(l)})_{\#}^{\mathcal{X}}=P$, hence $\pi^{(l)}\in\Pi(P,\star)$. From \eqref{inegalite_mon_dual_2}, it holds that $\|v^{(l)}\|_\infty\leq
+  M\|\mathsf{c}\|_\infty$ for all $l\geq 1$, and from
+  \eqref{inegalite_mon_dual_1}, $\|u^{(l+1)}\|_\infty\leq
+  \|v^{(l)}\|_\infty+\|\mathsf{c}\|_\infty \leq(M+1)\|\mathsf{c}\|_\infty$
+  for all $l\geq 1$. The same estimates hold for $\hat{u}$ and $\hat{v}$,
+  since $(\hat{u},\hat{v})$ satisfies \eqref{transform_pour_u} and
+  \eqref{transform_pour_v}. Hence, for all
+  $(x,y)\in\mathcal{X}\times\mathcal{Y}$ and all $l\geq 0$, the two
+  arguments
+  \begin{IEEEeqnarray}{rCl}
+    \label{borne_arguments_exp}
+    \frac{u^{(l+1)}(x)+v^{(l)}(y)-\mathsf{c}(x,y)}{\alpha}
+    \quad\text{and}\quad
+    \frac{\hat{u}(x)+\hat{v}(y)-\mathsf{c}(x,y)}{\alpha}
+  \end{IEEEeqnarray}
+  are both bounded in absolute value by $(2M+2)\|\mathsf{c}\|_\infty/\alpha$. For real numbers $a$ and $b$ with $|a|,|b|\leq R$, the mean value theorem
+  gives $|e^a-e^b|\leq e^R|a-b|$. Applying this pointwise with
+  $R=(2M+2)\|\mathsf{c}\|_\infty/\alpha$ and using \eqref{borne_arguments_exp},
+  for all $(x,y)\in\mathcal{X}\times\mathcal{Y}$ it holds that
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    &&\left|
+      \frac{\mathrm{d}\pi^{(l)}}{\mathrm{d}PQ}(x,y)
+      -
+      \frac{\mathrm{d}\hat\pi}{\mathrm{d}PQ}(x,y)
+    \right| \\
+    &&\leq
+    \frac{e^{(2M+2)\|\mathsf{c}\|_\infty/\alpha}}{\alpha}
+    \left(
+      \bigl|u^{(l+1)}(x)-\hat{u}(x)\bigr|
+      +
+      \bigl|v^{(l)}(y)-\hat{v}(y)\bigr|
+    \right).\ \ \ \ \
+  \end{IEEEeqnarray}
+  Applying \eqref{convergence_norme_infinie_linear_u} and
+  \eqref{convergence_norme_infinie_linear_v} to the previous expression
+  yields
+  \begin{IEEEeqnarray}{rCl}
+    \left\|
+      \frac{\mathrm{d}\pi^{(l)}}{\mathrm{d}PQ}
+      -
+      \frac{\mathrm{d}\hat\pi}{\mathrm{d}PQ}
+    \right\|_\infty
+    &\leq&
+    2\,e^{(2M+2)\|\mathsf{c}\|_\infty/\alpha}
+    \,\rho_{(\mathsf{c},\alpha,\beta)}^l\,
+    d_{\mathrm{H}}\!\left(b^{(0)},\hat{b}\right),
+  \end{IEEEeqnarray}
+  which gives \eqref{convergence_densite_primale}. The total variation bound
+  then follows from
+  \begin{IEEEeqnarray}{rCl}
+    \label{convergence_tv}
+    \bigl\|\pi^{(l)}-\hat\pi\bigr\|_{TV}
+    \;\triangleq\;
+    \frac{1}{2}
+    \int_{\mathcal{X}\times\mathcal{Y}}\!
+      \left|
+        \frac{\mathrm{d}\pi^{(l)}}{\mathrm{d}PQ}
+        -
+        \frac{\mathrm{d}\hat\pi}{\mathrm{d}PQ}
+      \right|\,\mathrm{d}PQ
+    \;\leq\;
+    \frac{1}{2}
+    \left\|
+      \frac{\mathrm{d}\pi^{(l)}}{\mathrm{d}PQ}
+      -
+      \frac{\mathrm{d}\hat\pi}{\mathrm{d}PQ}
+    \right\|_\infty, \ \ \ \ \
+  \end{IEEEeqnarray}
+  since $PQ$ is a probability measure.
+\end{IEEEproof}
+
+\newpage
+\input{checklist.tex}
+
+\end{document}

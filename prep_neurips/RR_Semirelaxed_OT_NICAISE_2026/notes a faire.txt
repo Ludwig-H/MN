@@ -1,0 +1,13 @@
+Ce qui manque pour compléter le travail :
+Pour un rapport INRIA publiable sur HAL, il manque essentiellement la rédaction : l'introduction (que tu reconnais toi-même être « à refaire »), l'abstract, l'état de l'art, et nettoyer tous les commentaires en rouge. Côté technique, le rapport actuel est déjà substantiel.
+
+
+Pour une publication conférence (NeurIPS, AISTATS), il manque des éléments importants. D'abord, des expériences numériques sont absolument indispensables. Au minimum : comparaison de l'algorithme proposé vs le schéma de Chizat et al. [3] (eq. 7a-7b) en termes de convergence, illustration sur des problèmes synthétiques et un cas applicatif (color transfer, domain adaptation). Ensuite, il faudrait une discussion sur le comportement du taux ρ quand ‖c‖∞/α est grand — le tanh(‖c‖∞/α)² tend vers 1, ce qui est la faiblesse classique de l'approche par métrique de Hilbert. Le papier récent de Chizat, Delalande & Merigot (arXiv 2407.01202) obtient des taux de contraction polynomiaux en λ/c∞ pour le Sinkhorn classique, exponentiellement meilleurs que le taux Birkhoff. Si tu pouvais obtenir un résultat similaire dans le cas semi-relaxé, ça serait un gros plus. Mais c'est clairement ambitieux — leur technique repose sur des arguments de log-concavité et de semi-concavité du coût qui ne se transposent pas directement.
+
+
+Les résultats que je considérerais « logiques » pour compléter seraient : la convergence en valeur objective à vitesse linéaire (tu le mentionnes dans tes notes), la convergence de la mesure primale πˆ associée aux itérés (Corollaire 3.4 non prouvé), et une borne sur l'erreur d'approximation par rapport au problème non régularisé (quand α, β varient). Ce dernier point est plus ambitieux mais serait très valorisant pour une publication. Pour le rapport INRIA, les deux premiers sont raisonnables et pas excessivement ambitieux.
+
+ELEMENTS DE REPONSE
+****************************************************************************************************************************
+Pour l'objectif, la continuité séquentielle de D le long de suites Lp-convergentes bornées en L∞ (déjà utilisée dans la preuve du Théorème 3.3) donne directement D(u⁽ⁿ⁾,v⁽ⁿ⁾) → D(û,v̂) et la vitesse linéaire vient de la Lipschitz-continuité de D composée avec le taux en norme uniforme du Corollaire 3.5. Pour la mesure primale, la densité exp((u⁽ⁿ⁾+v⁽ⁿ⁾−c)/α) converge uniformément vers exp((û+v̂−c)/α) par continuité de l'exponentielle sur un compact, c'est quasi-gratuit,
+****************************************************************************************************************************
