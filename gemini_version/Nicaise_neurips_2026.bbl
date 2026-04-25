@@ -1,0 +1,62 @@
+\begin{thebibliography}{8}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Br{\'e}zis(2011)]{brezissobolev}
+Ha{\"i}m Br{\'e}zis.
+\newblock \emph{Functional Analysis, Sobolev Spaces and Partial Differential
+  Equations}.
+\newblock Springer, New York, NY, first edition, 2011.
+
+\bibitem[Chizat et~al.(2018)Chizat, Peyr{\'e}, Schmitzer, and
+  Vialard]{chizat2018scaling}
+L{\'e}na{\"\i}c Chizat, Gabriel Peyr{\'e}, Bernhard Schmitzer, and
+  Fran{\c{c}}ois-Xavier Vialard.
+\newblock Scaling algorithms for unbalanced transport problems.
+\newblock \emph{Mathematics of Computation}, 87\penalty0 (314):\penalty0
+  2563--2609, Feb. 2018.
+\newblock \doi{10.1090/mcom/3303}.
+
+\bibitem[Cuturi(2013)]{cuturi2013sinkhorndistanceslightspeedcomputation}
+Marco Cuturi.
+\newblock Sinkhorn distances: Lightspeed computation of optimal transportation
+  distances.
+\newblock In \emph{Proceedings of the International Conference on Neural
+  Information Processing Systems (NeurIPS)}, volume~2, pages 2292--2300, Dec.
+  2013.
+
+\bibitem[Di~Marino and
+  Gerolin(2020)]{dimarino2020optimaltransportlossessinkhorn}
+Simone Di~Marino and Augusto Gerolin.
+\newblock Optimal transport losses and sinkhorn algorithm with general convex
+  regularization.
+\newblock \emph{arXiv preprint arXiv:2007.00976}, Jul. 2020.
+
+\bibitem[Lemmens and Nussbaum(2013)]{Lemmens2013BirkhoffsVO}
+Bas Lemmens and Roger~D. Nussbaum.
+\newblock Birkhoff's version of hilbert's metric and its applications in
+  analysis.
+\newblock \emph{arXiv: Metric Geometry}, 2013.
+\newblock URL \url{https://api.semanticscholar.org/CorpusID:119321129}.
+
+\bibitem[Nussbaum(2007)]{nussbaum2007fixed}
+Roger~D. Nussbaum.
+\newblock Fixed point theorems and denjoy--wolff theorems for hilbert's
+  projective metric in infinite dimensions.
+\newblock \emph{Topological Methods in Nonlinear Analysis}, 29\penalty0
+  (2):\penalty0 199--249, 2007.
+
+\bibitem[Rudin(1987)]{rudin1987real}
+Walter Rudin.
+\newblock \emph{Real and Complex Analysis}.
+\newblock McGraw-Hill, New York, NY, USA, third edition, 1987.
+
+\bibitem[Zalinescu(2002)]{convexanalysis}
+Constantin Zalinescu.
+\newblock \emph{Convex analysis in general vector spaces}.
+\newblock World Scientific, Singapore, first edition, 2002.
+
+\end{thebibliography}
