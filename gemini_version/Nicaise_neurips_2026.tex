@@ -14,7 +14,7 @@
 \usepackage{amssymb}
 \usepackage{amsthm}
 \usepackage{mathtools}
-\usepackage{dsfont}
+%%\usepackage{dsfont}
 \usepackage{bm}
 \usepackage{enumitem}
 \usepackage{mathrsfs}
@@ -99,7 +99,7 @@ Analysis of optimality conditions and the derivation of dual problems rely heavi
 \begin{definition}
   \label{definiton_convex_conjugate}
   Let $\mathcal E$ be a Banach space and $\mathcal E'$ be its topological dual space.
-Let $\phi : \mathcal E \to \mathbb{R} \cup \{-\infty,+\infty \}$; the convex conjugate (or Fenchel conjugate) of $\phi$ is the function $\phi^* : \mathcal E' \to \mathbb{R} \cup \{-\infty,+\infty \}$ defined for $y \in \mathcal E'$ through (see \cite[Section~2.3]{Zalinescu2002})
+Let $\phi : \mathcal E \to \mathbb{R} \cup \{-\infty,+\infty \}$; the convex conjugate (or Fenchel conjugate) of $\phi$ is the function $\phi^* : \mathcal E' \to \mathbb{R} \cup \{-\infty,+\infty \}$ defined for $y \in \mathcal E'$ through (see \cite[Section~2.3]{convexanalysis})
 \begin{IEEEeqnarray}{rCl}
 \phi^*(y) = \sup_{x \in \mathcal{E}} (\langle y,x \rangle - \phi(x)).
 \end{IEEEeqnarray}
@@ -124,11 +124,11 @@ Throughout this section, $(\mathcal{X},P)$ and $(\mathcal{Y},Q)$ are fixed proba
   \inf_{\pi \in \Pi(P,\star)} \int_{\mathcal X \times \mathcal Y} \mathsf{c}(x,y) \mathrm{d}\pi(x,y).
 \end{IEEEeqnarray}
 
-Standard approaches for solving semi-constrained optimal transport problems often rely on linear programming \cite{cuturi2013sinkhorn}. However, these methods involve significant computational complexity, which frequently becomes prohibitive for large-scale datasets or high-dimensional problems. Such linear programming formulations scale poorly with the number of support points, making them computationally intractable for many modern machine learning applications.
+Standard approaches for solving semi-constrained optimal transport problems often rely on linear programming \cite{cuturi2013sinkhorndistanceslightspeedcomputation}. However, these methods involve significant computational complexity, which frequently becomes prohibitive for large-scale datasets or high-dimensional problems. Such linear programming formulations scale poorly with the number of support points, making them computationally intractable for many modern machine learning applications.
 
 \section{Sinkhorn-Like Regularization Scheme}
 Throughout this section, $(\mathcal{X},P)$ and $(\mathcal{Y},Q)$ are fixed probability spaces. The function $\mathsf{c}: \mathcal X \times \mathcal Y \to \mathbb{R}$ is a lower semi-continuous, measurable, bounded function, and $\alpha$ and $\beta$ are strictly positive numbers.
-The objective is to extend the results established in the seminal work of \cite{cuturi2013sinkhorn} to the framework of semi-relaxed optimal transport. This goal is achieved through a specific choice of regularization that ensures the dual problem is amenable to Sinkhorn-like iterations. The proposed scheme fits within the general framework introduced in \cite{chizat2018scaling}. More precisely, the problem is a particular instance of \cite[Equation 3.1]{chizat2018scaling} where $n=1$, the functional $\mathcal{F}_1$ is the indicator function of the set $\{P\}$, and $\mathcal{F}_2$ equals $\beta$ times the Kullback-Leibler (KL) divergence with respect to $Q$, with $\beta$ strictly positive. The reference measures, denoted as $dx$ and $dy$ in \cite{chizat2018scaling}, correspond here to $P$ and $Q$, respectively. This specialization leads to the following problem
+The objective is to extend the results established in the seminal work of \cite{cuturi2013sinkhorndistanceslightspeedcomputation} to the framework of semi-relaxed optimal transport. This goal is achieved through a specific choice of regularization that ensures the dual problem is amenable to Sinkhorn-like iterations. The proposed scheme fits within the general framework introduced in \cite{chizat2018scaling}. More precisely, the problem is a particular instance of \cite[Equation 3.1]{chizat2018scaling} where $n=1$, the functional $\mathcal{F}_1$ is the indicator function of the set $\{P\}$, and $\mathcal{F}_2$ equals $\beta$ times the Kullback-Leibler (KL) divergence with respect to $Q$, with $\beta$ strictly positive. The reference measures, denoted as $dx$ and $dy$ in \cite{chizat2018scaling}, correspond here to $P$ and $Q$, respectively. This specialization leads to the following problem
 \begin{IEEEeqnarray}{rCl}
   \label{primal_avec_2_KL}
   \inf_{\pi \in \Pi(P,\star)} \mathsf{P}(\pi) \triangleq \int_{\mathcal X \times \mathcal Y} \mathsf{c}(x,y) \mathrm{d}\pi(x,y)+\alpha D_{\operatorname{KL}}(\pi || PQ)  + \beta D_{\operatorname{KL}}(\pi^{\mathcal Y}_{\#} || Q).
@@ -184,7 +184,7 @@ e^{-\frac{\mathsf D(x,y)}{\alpha}}
 While these results hold in a highly general framework, it is possible to achieve tighter theoretical bounds by explicitly exploiting the structure of our semi-relaxed problem, particularly the fact that the feasible couplings are probability measures.
 
 \subsection{A Novel Functional Dual Formulation}
-This section proposes an alternative dual formulation aiming to strengthen the convergence results of the potentials without requiring finite space assumptions. The derivation in \cite{chizat2018scaling} is highly general and does not explicitly account for the fact that the feasible couplings for the primal problems are necessarily probability measures. The alternative derivation presented here utilizes the variational formula of the KL divergence. The dual problem is subsequently obtained through the inversion of the infimum and supremum. This approach results in a formulation situated in the log-domain, which shares structural similarities with the notion of free energy in statistical physics \cite{dimarino2020optimal}.
+This section proposes an alternative dual formulation aiming to strengthen the convergence results of the potentials without requiring finite space assumptions. The derivation in \cite{chizat2018scaling} is highly general and does not explicitly account for the fact that the feasible couplings for the primal problems are necessarily probability measures. The alternative derivation presented here utilizes the variational formula of the KL divergence. The dual problem is subsequently obtained through the inversion of the infimum and supremum. This approach results in a formulation situated in the log-domain, which shares structural similarities with the notion of free energy in statistical physics \cite{dimarino2020optimaltransportlossessinkhorn}.
 \begin{IEEEeqnarray}{rCl}
   \nonumber
   \label{dual_maversion_fonctionnelle_C}
@@ -247,7 +247,7 @@ By setting the partial derivatives to zero, and simultaneously enforcing a norma
 \end{corollary}
 The proof is detailed in Appendix \ref{app:proofs}.
 
-To arrive at the compactness arguments necessary for proving existence \cite{dimarino2020optimal}, we first bound the oscillations of the operators.
+To arrive at the compactness arguments necessary for proving existence \cite{dimarino2020optimaltransportlossessinkhorn}, we first bound the oscillations of the operators.
 
 \begin{lemma}
   \label{lemme_osc_inegalites}
@@ -320,7 +320,7 @@ The proof is detailed in Appendix \ref{app:proofs}.
 
 \subsection{Approximation Error Bounds}
 \label{sec:approx_error}
-In this section, we analyze the behavior of the regularized solution when varying the parameters $\alpha$ and $\beta$. A crucial aspect of this regularized formulation is the implicit constraint imposed by the reference measure $Q$. Because of the presence of the Kullback-Leibler divergence with respect to $Q$, the second marginal of the solution to the regularized problem is constrained to share the support of $Q$. Consequently, convergence to a minimizer of the unregularized semi-relaxed problem is only possible if there exists such a minimizer whose second marginal is absolutely continuous with respect to $Q$. This highlights the importance of carefully selecting the reference measure $Q$ in practice \cite{dimarino2020optimal}.
+In this section, we analyze the behavior of the regularized solution when varying the parameters $\alpha$ and $\beta$. A crucial aspect of this regularized formulation is the implicit constraint imposed by the reference measure $Q$. Because of the presence of the Kullback-Leibler divergence with respect to $Q$, the second marginal of the solution to the regularized problem is constrained to share the support of $Q$. Consequently, convergence to a minimizer of the unregularized semi-relaxed problem is only possible if there exists such a minimizer whose second marginal is absolutely continuous with respect to $Q$. This highlights the importance of carefully selecting the reference measure $Q$ in practice \cite{dimarino2020optimaltransportlossessinkhorn}.
 
 \subsection{Iterative Algorithms and Convergence}
 
@@ -492,29 +492,8 @@ We proposed a robust dual formulation and associated Sinkhorn-like algorithm for
   This work was supported by INRIA and the French National Research Agency.
 \end{ack}
 
-\section*{References}
-\small
-
-[1] Chizat, L., Peyré, G., Schmitzer, B., \& Vialard, F.-X. (2018). Scaling algorithms for unbalanced optimal transport problems. \emph{Mathematics of Computation}, 87(314), 2563-2609.
-
-[2] Cuturi, M. (2013). Sinkhorn distances: Lightspeed computation of optimal transport. \emph{Advances in neural information processing systems}, 26.
-
-[3] Di Marino, S., \& Gerolin, A. (2020). Optimal transport losses and sinkhorn algorithm with general convex regularization. \emph{arXiv preprint arXiv:2007.00976}.
-
-[4] Lemmens, B., \& Nussbaum, R. (2013). Birkhoff's version of Hilbert's metric and its applications in analysis. \emph{Handbook of Hilbert Geometry}, 275-303.
-
-[5] Nussbaum, R. D. (2007). Fixed point theorems and Denjoy-Wolff theorems for Hilbert's projective metric in infinite dimensions. \emph{Topological Methods in Nonlinear Analysis}, 29(2), 199-249.
-
-[6] Rudin, W. (1987). \emph{Real and complex analysis}. Tata McGraw-hill education.
-
-[7] Luenberger, D. G. (1997). \emph{Optimization by vector space methods}. John Wiley \& Sons.
-
-[8] Brezis, H. (2010). \emph{Functional analysis, Sobolev spaces and partial differential equations}. Springer Science \& Business Media.
-
-[9] Rockafellar, R. T. (1997). \emph{Convex analysis} (Vol. 28). Princeton university press.
-
-[10] Z\u{a}linescu, C. (2002). \emph{Convex analysis in general vector spaces}. World Scientific.
-
+\bibliographystyle{plainnat}
+\bibliography{biblio2}
 
 \appendix
 \section{Technical appendices and supplementary material}
