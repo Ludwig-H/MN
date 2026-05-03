@@ -1,0 +1,3672 @@
+\documentclass{article}
+\usepackage{neurips_2026}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{mathtools}
+\usepackage{dsfont}
+\usepackage{bm}
+\usepackage{enumitem}
+\usepackage{mathrsfs}
+\usepackage[ruled, vlined]{algorithm2e}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{IEEEtrantools}
+
+\newtheorem{definition}{Definition}[section]
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{example}{Example}[section]
+\newtheorem{corollary}{Corollary}[section]
+\newtheorem{lemma}{Lemma}[section]
+
+\newcommand{\eqas}[1]{\displaystyle\mathop{ \stackrel{a.s.}{=}}_{#1}}
+\newcommand{\geqas}[1]{\displaystyle\mathop{ \stackrel{a.s.}{\geq}}_{#1}}
+\newcommand{\leqas}[1]{\displaystyle\mathop{ \stackrel{a.s.}{\leq}}_{#1}}
+\newcommand{\strictleqas}[1]{\displaystyle\mathop{ \stackrel{a.s.}{<}}_{#1}}
+\newcommand{\strictgeqas}[1]{\displaystyle\mathop{ \stackrel{a.s.}{>}}_{#1}}
+\newcommand{\subsetas}[1]{\displaystyle\mathop{ \stackrel{a.s.}{\subset}}_{#1}}
+
+\newcommand{\middlesqueezeequAggressive}{%
+  \thinmuskip=0mu
+  \medmuskip=0.4mu
+  \thickmuskip=0.8mu
+  \nulldelimiterspace=-1pt
+  \scriptspace=0pt
+}
+\newcommand{\middlesqueezeequBrutal}{%
+  \thinmuskip=0mu
+  \medmuskip=0mu
+  \thickmuskip=0.3mu
+  \nulldelimiterspace=-1.5pt
+  \scriptspace=0pt
+}
+
+\title{Gauge-Fixed Sinkhorn Algorithms for Semi-Relaxed Optimal Transport}
+\author{%
+  Maxime Nicaise \\
+  INRIA, Centre Inria d'Université Côte d'Azur \\
+  \And
+  Yaiza Bermudez \\
+  INRIA, Centre Inria d'Université Côte d'Azur \\
+  \AND
+  Samir M. Perlaza \\
+  INRIA, Centre Inria d'Université Côte d'Azur \\
+  Princeton University
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Semi-relaxed optimal transport (SROT) differs from the classical optimal transport framework by enforcing only one marginal constraint, leaving the second marginal free. This formulation arises naturally in applications such as domain adaptation, multi-omics single-cell analysis, and graph dictionary learning, where one distribution serves as a fixed reference while the other is only partially characterized. While the unregularized problem admits a simple closed-form solution, it is non-differentiable and highly sensitive to outliers, which makes it unsuitable for gradient-based learning pipelines. This paper studies a doubly-regularized formulation that combines an entropic penalty on the joint coupling with a Kullback--Leibler divergence on the second marginal, the same problem considered in the discrete setting in \cite{le2021robust, fukunaga2022convergence} and recoverable as a specialization of the general scaling framework of \cite{chizat2018scaling}. The contribution is a canonical \emph{gauge-fixed representative} of the corresponding semi-relaxed Sinkhorn iteration, obtained by exploiting the probability constraint on feasible couplings to fix a translation gauge in the log-domain dual. Strong duality, together with existence and uniqueness of the gauge-fixed dual potentials, is established on general Polish spaces, without finite-support assumptions. An explicit Hilbert-projective contraction is proved for the gauge-fixed operator and is transferred into uniform convergence of the log-domain potentials, geometric convergence of the dual objective value, and total-variation convergence of the primal coupling. A separate $(\alpha,\beta)$-bias analysis quantifies the gap to the unregularized SROT value as a function of the regularization parameters, and yields an $L^1$ control toward the set of unregularized minimizers in the discrete setting. \textcolor{red}{ajouter resultats experimentaux.}
+\end{abstract}
+
+\section{Introduction}
+Optimal transport (OT) has become a foundational tool for comparing probability distributions in machine learning, with applications ranging from generative modeling and domain adaptation to graph learning and single-cell genomics \cite{computationaloptitranbsoort, domainadaptation}. Classical OT enforces an exact mass-conservation constraint on both marginals, which is too rigid in many practical settings. When one distribution serves as a fixed reference and the other is only partially observed, contaminated by outliers, or known up to a noisy estimate, requiring exact matching on both sides is unrealistic. Semi-relaxed optimal transport (SROT) addresses this asymmetry by enforcing the marginal constraint on a single side and penalizing deviations of the second marginal through a divergence, typically the Kullback--Leibler (KL) divergence \cite{chizat2018scaling}. This formulation arises naturally in domain adaptation under target shift, in graph dictionary learning where the prototype is fixed but the assignment is not \cite{vincentcuaz2022semirelaxed}, and in multi-omics single-cell analysis where one modality acts as an anchor for partial alignment.
+
+Despite this conceptual appeal, the unregularized SROT problem is poorly suited to modern learning pipelines. Because only one marginal is constrained, the infimum decouples across the source space into independent pointwise minimizations, and an optimal coupling can be supported on a transport map of the form $x \mapsto \arg\min_{y} \mathsf{c}(x, y)$. This closed form has three serious consequences. First, the resulting cost is non-differentiable almost everywhere with respect to the cost matrix or the source measure, which prevents its use as a loss inside gradient-based architectures. Second, the pointwise structure makes the solution acutely sensitive to outliers in the support of $Q$: a single anomalous target point with low cost can absorb arbitrarily large mass. Third, the decoupling discards any global matching geometry, since the assignment of mass at $x$ ignores the assignments at all other source locations \cite{le2021robust, nguyen2023unbalanced}.
+
+To overcome these limitations, this paper studies a doubly-regularized SROT problem
+combining an entropic penalty (strength $\alpha > 0$) on the joint coupling with a
+Kullback--Leibler divergence (strength $\beta > 0$) on the second marginal. As shown
+below, both regularizers are strictly necessary: neither alone yields a strictly convex,
+globally coupled, differentiable formulation amenable to gradient-based optimization.
+The same doubly-regularized formulation has been studied in the discrete setting under
+the names robust semi-constrained optimal transport \cite{le2021robust} and SR-Sinkhorn
+\cite{fukunaga2022convergence}, and is recoverable as a specialization of the general
+scaling framework of \cite{chizat2018scaling}. The contribution of this paper is not a
+new alternating-scaling iteration but a canonical gauge-fixed representative of the same
+projective orbit, together with the convergence and approximation analysis it makes
+possible on general Polish spaces. The resulting dual problem, derived through the
+variational formula of the KL divergence rather than through the general framework of
+\cite{chizat2018scaling}, is translation-invariant in the log-domain. This structure is
+exploited to define the \emph{Gauge-Fixed Sinkhorn} iteration, with a built-in
+normalization step and provable linear convergence. A parallel normalization idea was
+identified for unbalanced OT in \cite{sejourne2022faster}; the present work develops its
+analogue for the semi-relaxed regime, where the asymmetry between the two marginals
+gives rise to a different translation invariance.
+
+\paragraph{Contributions.} The contributions of this paper are summarized as follows.
+
+\begin{itemize}
+    \item \textbf{A translation-invariant dual for doubly-regularized SROT.} A novel dual formulation is derived, exploiting the fact that feasible primal couplings are probability measures, an aspect not used in the more general derivation of \cite{chizat2018scaling}. The resulting log-domain dual is translation-invariant and admits a natural gauge-fixing condition selecting a canonical pair of potentials.
+
+    \item \textbf{A canonical gauge-fixed representative of the SR/RS-Sinkhorn orbit.} The translation invariance of the dual is used to select a canonical normalization of the standard semi-relaxed Sinkhorn iteration of \cite{le2021robust, fukunaga2022convergence}, which is also recoverable as a specialization of the scaling framework of \cite{chizat2018scaling}. The resulting Gauge-Fixed Sinkhorn updates are projectively equivalent to those iterations but carry the gauge-fixing constant explicitly, yielding primal iterates that are automatically probability measures at every step.
+
+    \item \textbf{Hilbert-projective contraction transferred to $L^\infty$ and total variation.} Strong duality and existence and uniqueness of the gauge-fixed dual potentials are established on general Polish spaces. A Hilbert-projective contraction is proved for the gauge-fixed operator, with an explicit contraction factor stated in Theorem~\ref{theoreme_linear_rate_scaled_hilbert}. Gauge fixing is what converts projective convergence into uniform convergence of the log-domain potentials, which in turn transfers to geometric convergence of the dual objective value and total-variation convergence of the primal coupling.
+
+    \item \textbf{Quantitative approximation error bounds.} Explicit upper bounds on the gap between the regularized and unregularized SROT values are provided as functions of $\alpha$ and $\beta$ separately, with weak convergence of the regularized minimizers and an $L^1$-type control in the discrete setting under a mild row-non-degeneracy condition. The natural unregularized limit is the restricted value $SROT_Q$ defined in equation~\eqref{eq:def_srot_q_main_text}, which coincides with $SROT$ under mild support and continuity conditions on $Q$.
+\end{itemize}
+\section{Related Work}
+
+Two lines of work are directly concerned with the same doubly-regularized semi-relaxed optimal transport problem studied here. \cite{le2021robust} introduce robust semi-constrained optimal transport with entropic regularization and propose the Robust Semi-Sinkhorn algorithm in the finite-dimensional setting, together with computational-complexity and barycenter-computation results. \cite{fukunaga2022convergence} study SR-Sinkhorn for SROT in the discrete probability-simplex setting, explicitly relating it to the Robust Semi-Sinkhorn iteration of \cite{le2021robust}, and derive bounds on the functional-value gap, the marginal-constraint gap, and the OT-distance gap. The alternating-scaling iteration considered in the present work is the same projective orbit; the contribution lies in selecting a canonical gauge-fixed representative of that orbit and analyzing it in Hilbert's projective metric on general Polish spaces.
+
+These same iterations also fit within the general scaling-algorithm framework of \cite{chizat2018scaling}, which encompasses unbalanced, partial, and semi-relaxed OT under a unified generalized Sinkhorn scheme. The semi-relaxed problem studied here is recovered as a specialization, with the first marginal functional taken to be a hard constraint and the second a Kullback--Leibler divergence penalty toward a reference target measure. The convergence guarantees of \cite{chizat2018scaling} are stated in considerable generality, but they are not specialized to the probability-measure constraint inherent to the semi-relaxed setting and do not identify the gauge-fixing normalization exploited here.
+
+The conceptual antecedent for the gauge-fixing idea is the translation-invariant Sinkhorn of \cite{sejourne2022faster} for unbalanced OT, which identified that the slow convergence of Sinkhorn in the unbalanced regime stems from the absence of a global normalization of the iterates, equivalently a translation gauge in the dual potentials. The present work develops a parallel idea for the semi-relaxed problem, where the asymmetry between the two marginals (one hard-constrained, one penalized) gives rise to a different translation invariance, and where the gauge-fixed updates carry the normalization constant explicitly through the iteration.
+
+Foundational results on entropic OT \cite{cuturi2013sinkhorndistanceslightspeedcomputation, altschuler2017nearlinear, computationaloptitranbsoort} and on the consistency of entropic regularization \cite{carlier2017convergence, pal2024difference} provide the broader analytical context, while general convergence properties of unbalanced Sinkhorn have been refined in \cite{pham2020unbalanced, nguyen2023unbalanced}. Other related lines include the unregularized SROT problem solved by block-coordinate Frank--Wolfe \cite{fukunaga2021blockcoordinate}, the KKT-based reduction of semi-unbalanced OT to balanced OT \cite{liu2025equivalent}, the semi-relaxed Gromov--Wasserstein divergence of \cite{vincentcuaz2022semirelaxed} which provides one of the main motivating applications, partial OT and robust matching \cite{ibm2024partial, truong2026accelerated, yoon2026conditional, mignon2025semiunbalanced}, and alternative regularizations \cite{blondel2018smoothsparseoptimaltransport, tang2024sinkhorn, pele2009fast}, all of which are conceptually orthogonal to the gauge-fixing refinement pursued here.
+\section{Background and Problem Formulation}
+\subsection{Preliminaries}
+Throughout this work, $(\mathcal{X},P)$ and $(\mathcal{Y},Q)$ are fixed probability spaces. The function $\mathsf{c}: \mathcal X \times \mathcal Y \to \mathbb{R}$ is a lower semi-continuous measurable function, and $\alpha$ and $\beta$ are strictly positive numbers called regularization parameters. If a result needs further assumptions to be proved, these will be given in the statement of the result. If not, previous assumptions will not be repeated. The notation $\Pi(P, \star)$ denotes the set of probability measures on $\mathcal{X} \times \mathcal{Y}$ where only the first marginal is constrained to be $P$.
+
+
+
+
+
+
+
+
+
+\subsection{Semi-Relaxed Optimal Transport}
+
+Consider the semi-relaxed optimal transport problem
+\begin{align}
+  \label{primal_non_regularise}
+  \mathrm{SROT} \triangleq \inf_{\pi \in \Pi(P,\star)}
+  \int_{\mathcal{X} \times \mathcal{Y}} \mathsf{c}(x,y) \, \mathrm{d}\pi(x,y).
+\end{align}
+Because only one marginal is constrained, the infimum decouples across the source space
+into independent pointwise minimizations: an optimal coupling is supported on the
+transport map $x \mapsto \arg\min_{y \in \mathcal{Y}} \mathsf{c}(x,y)$, so the optimal
+value reduces to $\int_{\mathcal{X}} \min_{y \in \mathcal{Y}} \mathsf{c}(x,y) \,
+\mathrm{d}P(x)$. Intuitively, since the marginal constraint on $\mathcal{Y}$ is totally relaxed, all mass from a source point $x$ trivially flows to the target $y$ that minimizes the transport cost. While this closed form is analytically simple, it has three
+consequences that make the unregularized problem ill-suited to modern learning pipelines.
+First, the cost is non-differentiable almost everywhere with respect to the cost matrix
+or the source measure, preventing its use as a loss inside gradient-based architectures.
+Second, the pointwise structure makes the solution acutely sensitive to outliers in the
+support of $Q$, as a single anomalous target point with low cost can absorb arbitrarily
+large mass. Third, the decoupling discards any global matching geometry, since the
+assignment of mass at $x$ ignores the assignments at all other source locations
+\cite{le2021robust, nguyen2023unbalanced}.
+
+This paper therefore studies a doubly-regularized variant of \eqref{primal_non_regularise}
+combining an entropic penalty on the joint coupling (strength $\alpha > 0$) with a KL
+divergence on the second marginal with respect to $Q$ (strength $\beta > 0$). Both
+regularizers are strictly necessary. At $\beta = 0$, the second marginal remains free to
+concentrate arbitrarily and the objective separates into independent log-sum-exp
+minimizations on each fiber $\{x\} \times \mathcal{Y}$, losing the global geometry over
+the source space. Without entropic smoothing, a KL penalty in $\beta$ alone yields
+neither tractable Sinkhorn-type updates nor a differentiable cost. Only the joint
+presence of both penalties produces a strictly convex, differentiable, globally coupled
+formulation. As shown in Section~\ref{dualformsection}, the resulting dual, derived through the
+variational formula of the KL divergence rather than through the general framework of
+\cite{chizat2018scaling}, is translation-invariant in the log-domain, a structure
+exploited to derive the \emph{Gauge-Fixed Sinkhorn} algorithm with a built-in
+normalization step parallel to \cite{sejourne2022faster}.
+
+\subsection{Doubly-Regularized Semi-Relaxed Optimal Transport}
+\label{section_regularization}
+
+
+
+
+
+
+
+
+
+
+
+
+
+Building on the motivation above, this paper studies the following doubly-regularized
+variant of \eqref{primal_non_regularise}:
+\begin{align}
+  \label{primal_avec_2_KL}
+  \mathrm{SROT}_{\alpha,\beta}  \hspace{-0.5ex} \triangleq \hspace{-1ex} \inf_{\pi \in \Pi(P,\star)}
+  \mathsf{P}_{\alpha,\beta}(\pi)  \hspace{-0.5ex} \triangleq \hspace{-1ex}
+  \int_{\mathcal{X} \times \mathcal{Y}} \mathsf{c}(x,y) \, \mathrm{d}\pi(x,y)
+   + \alpha \, D_{\mathrm{KL}}(\pi \| P \otimes Q)
+   +  \beta \, D_{\mathrm{KL}}(\pi^{\mathcal{Y}}_{\#} \| Q).
+\end{align}
+The entropic term $\alpha \, D_{\mathrm{KL}}(\pi \| P \otimes Q)$ smooths the coupling
+and penalizes mass concentration, promoting soft and statistically robust assignments.
+The marginal term $\beta \, D_{\mathrm{KL}}(\pi^{\mathcal{Y}}_{\#} \| Q)$ can be
+interpreted as a fidelity penalty that prevents the second marginal from drifting far
+from the reference measure $Q$, or equivalently, as a soft enforcement of the otherwise
+absent second marginal constraint. It can also be viewed as a regularization on the
+degree to which the model is allowed to reallocate mass across the target space.
+
+This formulation fits within the general scaling framework of \cite{chizat2018scaling},
+recovered as a particular instance of \cite[Equation~3.1]{chizat2018scaling} with $n=1$,
+where the functional $\mathcal{F}_1$ is the indicator of $\{P\}$ and $\mathcal{F}_2$
+equals $\beta \, D_{\mathrm{KL}}(\cdot \| Q)$, with the reference measures therein
+identified as $P$ and $Q$ respectively. The same doubly-regularized formulation, under
+different notation, appears in \cite{le2021robust} as Robust Semi-constrained Optimal
+Transport and is studied in the discrete setting in \cite{fukunaga2022convergence}, where
+complexity bounds on the functional value, marginal, and OT distance gaps are
+established for the SR-Sinkhorn algorithm. The present work studies the same problem and
+the same alternating-scaling orbit as \cite{le2021robust, fukunaga2022convergence}, and
+complements those works by exploiting the translation invariance of the dual problem to
+select a canonical gauge-fixed representative of that orbit, for which a Hilbert-projective
+contraction is proved on general Polish spaces, without finite-support assumptions.
+
+
+
+
+
+
+
+
+
+
+
+
+
+% \subsection{Connections to Existing Dual Formulations \textcolor{red}{degager ca ou alors en parler de facon intelligente c naze la} }
+% From \cite[Theorem~3.2]{chizat2018scaling}, the dual of problem \eqref{primal_avec_2_KL} can be written as follows
+% \begin{IEEEeqnarray}{rCl}
+%   \nonumber
+%   \label{dual_par_chizat}
+%   \sup_{u\in \operatorname{L}^\infty(\mathcal X), v \in \operatorname{L}^\infty(\mathcal{Y})}\  &&\int_{\mathcal{X}} u(x)\mathrm{d}P(x) - \beta \int_{\mathcal{Y}}\left(e^{-\frac{v(y)}{\beta}}-1\right)\mathrm{d}Q(y) \\ &&-\alpha \int_{\mathcal{X} \times \mathcal{Y}} \left( e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}-e^{-\frac{\mathsf{c}(x,y)}{\alpha}}\right)\mathrm{d}P\otimes Q(x,y). \ \ \ \
+% \end{IEEEeqnarray}
+% The theoretical results from \cite{chizat2018scaling} remain applicable to this dual formulation. In particular, strong duality holds, ensuring equality between the supremum in \eqref{dual_par_chizat} and the infimum in \eqref{primal_avec_2_KL}. The convergence properties established in \cite[Proposition~3.9, Theorem~4.1]{chizat2018scaling} are also valid. Nevertheless, this work aims to provide enhanced convergence results and refined theoretical guarantees. From \cite[Section~3.3, Table~1]{chizat2018scaling}, the iterates obtained by alternating maximization on $\mathsf{D}_{\alpha,\beta}$ in \eqref{dual_par_chizat} can be written as follows
+% \begin{subequations}
+%     \label{sinkhorn_chizat_non_scale}
+% \begin{IEEEeqnarray}{rCl}
+%   \label{sinkhorn_chizat_sur_u}
+%     u^{(l+1)} &=& -\alpha \log\left(\int_{\mathcal Y} e^{\frac{v^{(l)}(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}Q(y) \right); \\
+%     \label{sinkhorn_chizat_sur_v}
+%     v^{(l+1)} &=& - \frac{\alpha\beta}{\alpha+\beta}\log\left(\int_{\mathcal X} e^{\frac{u^{(l+1)}(x)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}P(x) \right).
+% \end{IEEEeqnarray}
+% \end{subequations}
+% Or alternatively by considering the so-called scaled iterations 
+% \begin{IEEEeqnarray}{rCl}
+%   (a^{(l)},b^{(l)}) \triangleq (e^{\frac{u^{(l)}}{\alpha}},e^{\frac{v^{(l)}}{\alpha}}),
+% \end{IEEEeqnarray}
+% for which the algorithm is written as follows
+% \begin{subequations}
+%   \label{sinkhorn_chizat_scaled}
+% \begin{IEEEeqnarray}{rCl}
+%   \label{sinkhorn_chizat_sur_a}
+% a^{(k+1)}(x)
+% &=&
+% \left(
+% \int_{\mathcal Y}
+% e^{-\frac{\mathsf D(x,y)}{\alpha}}
+% \, b^{(k)}(y)^{-\frac{\beta}{\alpha}}
+% \, \mathrm d Q(y)
+% \right)^{-1};
+% \\[1.2em]
+%   \label{sinkhorn_chizat_sur_b}
+% b^{(k+1)}(y)
+% &=&
+% \left(
+% \int_{\mathcal X}
+% e^{-\frac{\mathsf D(x,y)}{\alpha}}
+% \, a^{(k+1)}(x)
+% \, \mathrm d P(x)
+% \right)^{\frac{\alpha}{\alpha+\beta}} .
+% \end{IEEEeqnarray}
+% \end{subequations}
+
+% While these results hold in a highly general framework, it is possible to achieve tighter theoretical bounds by explicitly exploiting the structure of the semi-relaxed problem, particularly the fact that the feasible couplings are probability measures.
+
+
+
+
+
+
+
+
+\section{Translation-Invariant Duality and Gauge-Fixed Sinkhorn}
+\subsection{Translation-Invariant Dual Formulation}
+\label{dualformsection}
+
+An alternative dual formulation is derived here with the goal of strengthening convergence
+guarantees to general Polish spaces, without finite-support assumptions. The derivation of
+\cite{chizat2018scaling} is highly general and thus does not exploit the fact that feasible
+primal couplings are necessarily probability measures in the SROT problem. The approach taken here relies on the
+variational formula of the KL divergence and yields the following dual formulation
+\begin{align}
+  \sup_{u\in \operatorname{L}^\infty(\mathcal{X}),\, v \in \operatorname{L}^\infty(\mathcal{Y})}
+  \mathsf{D}_{\alpha,\beta}(u,v)
+  &\triangleq
+  \int_{\mathcal{X}} u(x)\,\mathrm{d}P(x)
+  - \beta \log\!\left(\int_{\mathcal{Y}} e^{-\frac{v(y)}{\beta}}\,\mathrm{d}Q(y)\right)
+  \nonumber \\
+  &\quad
+  - \alpha \log\!\left(
+    \int_{\mathcal{X} \times \mathcal{Y}}
+    e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}
+    \,\mathrm{d}P\otimes Q(x,y)
+  \right). \label{dual_maversion_fonctionnelle_C}
+\end{align}
+A key structural property of $\mathsf{D}_{\alpha,\beta}$ is that it is invariant under
+independent constant shifts of both potentials: for all $M, N \in \mathbb{R}$,
+$\mathsf{D}_{\alpha,\beta}(u + M, v + N) = \mathsf{D}_{\alpha,\beta}(u,v)$
+(Lemma~\ref{lemme_propriete_de_ma_fonctionnelle_duale}). This is a direct consequence of
+the semi-relaxed structure: the linear term $\int_{\mathcal{X}} u(x)\,\mathrm{d}P(x)$
+contributes $+M$, the log-sum-exp term in $v$ contributes $+N$, and the joint
+log-sum-exp contributes $-(M+N)$, yielding zero net change. This two-parameter gauge
+freedom is what the title of the subsection refers to, and it is the structural mechanism
+exploited to derive the Gauge-Fixed Sinkhorn updates below.
+
+This translation invariance is conceptually related to, but structurally distinct from,
+the normalization insight of \cite{sejourne2022faster}. In the unbalanced OT setting of
+\cite{sejourne2022faster}, both marginal terms in the dual are non-linear in the
+potentials (log-sum-exp rather than linear), so the dual functional is not natively
+translation-invariant; invariance must be restored by constructing an envelope functional
+optimized over a one-parameter translation. In the present semi-relaxed setting, the hard
+constraint on the first marginal yields a linear term $\int_{\mathcal{X}}
+u(x)\,\mathrm{d}P(x)$ in the dual, and translation invariance holds directly for any
+independent shifts $M$ and $N$, without any envelope construction. The spirit of the
+approach is the same: fixing the gauge of the dual potentials at each iteration yields a
+normalization step that is invisible in Hilbert's projective metric yet produces iterates
+that are automatically probability measures and admit a clean contraction argument.
+
+
+
+
+
+
+\subsection{Sinkhorn-Like Alternating Projections}
+\label{section_sinkhorn_alternating}
+
+Two operators are introduced. They serve as the core updates of the alternating
+maximization scheme and, as established in the next section, they characterize the
+maximizers of the dual functional $\mathsf{D}_{\alpha,\beta}$.
+\begin{align}
+\label{formule_de_phi}
+\Phi(v)(x)
+&\triangleq
+-\alpha\log\left(
+\int_{\mathcal{Y}}
+e^{\frac{v(y)-\mathsf{c}(x,y)}{\alpha}}
+\,\mathrm{d}Q(y)
+\right),  \\
+\label{formule_de_psi}
+\Psi(u)(y)
+&\triangleq
+\beta\log\left(
+\int_{\mathcal{Y}}
+\left(
+\int_{\mathcal{X}}
+e^{\frac{u(x)-\mathsf{c}(x,y')}{\alpha}}
+\,\mathrm{d}P(x)
+\right)^{\frac{\alpha}{\alpha+\beta}}
+\,\mathrm{d}Q(y')
+\right)
+\nonumber \\
+&\quad
+-
+\frac{\alpha\beta}{\alpha+\beta}
+\log\left(
+\int_{\mathcal{X}}
+e^{\frac{u(x)-\mathsf{c}(x,y)}{\alpha}}
+\,\mathrm{d}P(x)
+\right).
+\end{align}
+Following the classical Sinkhorn algorithm~\cite{cuturi2013sinkhorndistanceslightspeedcomputation},
+the Gauge-Fixed Sinkhorn relies on alternating maximization of $\mathsf{D}_{\alpha,\beta}$
+over $u$ and $v$ in turn. The specific form of $\Phi$ and $\Psi$ is dictated by the
+optimality conditions of the gauge-normalized dual: setting the partial derivatives of
+$\mathsf{D}_{\alpha,\beta}$ (Lemma~\ref{lemme_differentiation}) to zero yields $u =
+\Phi(v) + \alpha\log Z(u,v)$ and a symmetric condition on $v$, where $Z(u,v) \triangleq
+\int_{\mathcal{X}\times\mathcal{Y}} e^{(u(x)+v(y)-\mathsf{c}(x,y))/\alpha}\,\mathrm{d}P\otimes Q(x,y)$.
+The translation invariance of $\mathsf{D}_{\alpha,\beta}$ established in
+Lemma~\ref{lemme_propriete_de_ma_fonctionnelle_duale} means that the gauge can be fixed
+to $Z(u,v) = 1$ without loss of generality, which immediately collapses the optimality
+conditions to $u = \Phi(v)$ and $v = \Psi(u)$. As a result, the operators
+automatically produce iterates that satisfy this normalization at every step,
+guaranteeing that the associated primal measure is a probability distribution with no
+additional renormalization required. The alternating maximization directly yields the unscaled iterative updates
+\begin{subequations}
+  \label{equations_algo_1}
+  \begin{align}
+    \label{update_unscaled_u}
+    u^{(l+1)} &= \Phi(v^{(l)}); \\
+    \label{update_unscaled_v}
+    v^{(l+1)} &= \Psi(u^{(l+1)}),
+  \end{align}
+\end{subequations}
+where $\Phi$ is defined in \eqref{formule_de_phi} and $\Psi$ in \eqref{formule_de_psi}. For numerical stability, an equivalent scaled formulation is preferred in practice, which is presented in Algorithm~\ref{algo_2_scaled} below. The scaled iterates are obtained from the unscaled updates~\eqref{equations_algo_1} by setting $(a^{(l)}, b^{(l)}) \triangleq (e^{u^{(l)}/\alpha}, e^{v^{(l)}/\alpha})$.
+
+The scaled iterations rely on the operators $\Xi : \operatorname{L}^\infty(\mathcal{Y}) \to \operatorname{L}^\infty(\mathcal{X})$ and $\Gamma : \operatorname{L}^\infty(\mathcal{X}) \to \operatorname{L}^\infty(\mathcal{Y})$, defined as
+\begin{align}
+  \label{formule_xi}
+  \Xi(b)(x) &\triangleq
+  \frac{1}{\displaystyle\int_{\mathcal{Y}}
+    b(y)\,e^{-\frac{\mathsf{c}(x,y)}{\alpha}}\,\mathrm{d}Q(y)};
+  \\[6pt]
+  \label{formule_gamma}
+  \Gamma(a)(y) &\triangleq
+  \left(
+    \frac{1}{\displaystyle\int_{\mathcal{X}}
+      a(x)\,e^{-\frac{\mathsf{c}(x,y)}{\alpha}}\,\mathrm{d}P(x)}
+  \right)^{\!\frac{\beta}{\alpha+\beta}} \hspace{-3.5ex}
+  \!\times
+  \left(
+    \int_{\mathcal{Y}}
+    \left(
+      \int_{\mathcal{X}}
+      a(x)\,e^{-\frac{\mathsf{c}(x,y')}{\alpha}}\,\mathrm{d}P(x)
+    \right)^{\!\frac{\alpha}{\alpha+\beta}} \hspace{-1ex}
+    \mathrm{d}Q(y')
+  \right)^{\!\frac{\beta}{\alpha}}\hspace{-2ex},
+\end{align}
+which yield the scaled iterative updates
+\begin{subequations}
+  \label{equations_algo_2}
+  \begin{align}
+    \label{scaled_update_1}
+    a^{(l+1)} &= \Xi\!\left(b^{(l)}\right), \\
+    \label{scaled_update_2}
+    b^{(l+1)} &= \Gamma\!\left(a^{(l+1)}\right).
+  \end{align}
+\end{subequations}
+
+\begin{algorithm}[ht]
+  \caption{Gauge-Fixed Sinkhorn (scaled)}
+  \label{algo_2_scaled}
+  \KwIn{cost $\mathsf{c}$; reference measures $P,Q$; regularization parameters $\alpha,\beta > 0$; stopping criterion (e.g., an error threshold or a maximum number of iterations).}
+  \KwOut{scaled potentials $a^{(l)}, b^{(l)}$.}
+  Initialize $b^{(0)} \gets \mathbf{1}$ and $l \gets 0$\;
+  \While{the stopping criterion is not met}{
+    $a^{(l+1)} \gets \Xi\!\left(b^{(l)}\right)$\;
+    $b^{(l+1)} \gets \Gamma\!\left(a^{(l+1)}\right)$\;
+    $l \gets l + 1$\;
+  }
+  \Return $a^{(l)}, b^{(l)}$\;
+\end{algorithm}
+Compared to the standard SR/RS-Sinkhorn iterates of \cite{le2021robust, fukunaga2022convergence}, also obtained as a specialization of the scaling framework of \cite[Equation~3.6]{chizat2018scaling}, the operator $\Psi$ contains an additional normalization term (the first summand in \eqref{formule_de_psi}). The two sets of iterates are projectively equivalent: they differ only by a constant translation in $v$, and the translation invariance of $\mathsf{D}_{\alpha,\beta}$ ensures that both yield the same dual objective value at every step. The advantage of the gauge-fixed form is that it admits a clean contraction analysis in Hilbert's projective metric, in which constant rescalings are invisible, and produces iterates that are automatically normalized. The practical benefits of this normalization are confirmed experimentally in Section~\ref{sec:experiments}.
+
+
+\section{Main Results}
+\subsection{Existence and Uniqueness}
+\label{section_dual_attainment}
+
+The following theorem establishes attainment of the dual supremum together with the existence and uniqueness of a maximizing pair satisfying the gauge-fixed optimality conditions. The proof of attainment, along with the supporting technical lemmas, is given in Appendix~\ref{app:dual_attainment}, while the existence and uniqueness of the gauge-fixed pair are established in Appendix~\ref{app:primal_attainment}.
+
+\begin{theorem}
+\label{theoreme_dual_attainment}
+The supremum in problem \eqref{dual_maversion_fonctionnelle_C} is attained. Moreover, there exists a unique pair $(\hat{u}, \hat{v}) \in \operatorname{L}^\infty(\mathcal{X}) \times \operatorname{L}^\infty(\mathcal{Y})$ satisfying
+\begin{align}
+\label{transform_pour_u}
+\hat{u} &= \Phi(\hat{v}), \\
+\label{transform_pour_v}
+\hat{v} &= \Psi(\hat{u}),
+\end{align}
+and this pair maximizes $\mathsf{D}_{\alpha,\beta}$ in
+\eqref{dual_maversion_fonctionnelle_C}.
+\end{theorem}
+
+The existence of a maximizer is established by restricting maximizing sequences to uniformly bounded potentials, which allows for the extraction of weak-$*$ convergent subsequences via the Banach--Alaoglu theorem. The global supremum is then attained due to the weak-$*$ lower semi-continuity of the integral functionals defining the dual objective $\mathsf{D}_{\alpha,\beta}$.
+
+The conditions \eqref{transform_pour_u} and \eqref{transform_pour_v} are precisely the
+gauge-normalized first-order optimality conditions of $\mathsf{D}_{\alpha,\beta}$: they
+arise from setting its partial derivatives (Lemma~\ref{lemme_differentiation}) to zero
+and simultaneously enforcing $Z(\hat{u}, \hat{v}) = 1$. The translation invariance of
+$\mathsf{D}_{\alpha,\beta}$ is what makes this gauge-fixing canonical: every orbit of
+translations $(u + M, v + N)$ contains exactly one pair satisfying
+\eqref{transform_pour_u} and \eqref{transform_pour_v}, as stated in
+Theorem~\ref{theoreme_dual_attainment}.
+
+Consequently, the infimum in the primal problem~\eqref{primal_avec_2_KL} is attained at a unique coupling $\hat{\pi} \ll P \otimes Q$, whose Gibbs-type density is given by $\mathrm{d}\hat{\pi}/\mathrm{d}(P \otimes Q) = \exp\!\bigl((\hat{u}(x) + \hat{v}(y) - \mathsf{c}(x,y))/\alpha\bigr)$. The formal statement and proof are provided in Appendix~\ref{app:primal_attainment}.
+
+\subsection{Linear Convergence of the Algorithm}
+
+In the classical unbalanced Sinkhorn setting with two relaxed marginals,
+\cite[Theorem~3.11]{chizat2018scaling} establishes a linear rate by viewing each
+scaling update as a $z$-homogeneous order-preserving map ($0 < z < 1$), which is
+strictly contractive in the Thompson metric. In the present semi-relaxed setting this
+argument breaks down: the update $\Gamma$ in \eqref{scaled_update_2} includes a global
+normalization factor that is spatially constant but iterate-dependent, destroying the
+required $z$-homogeneity. Convergence guarantees of complexity type already exist for
+the same orbit in the discrete setting, with bounds on the functional-value, marginal,
+and OT-distance gaps established for SR-Sinkhorn in \cite{fukunaga2022convergence}. The
+contribution of this section is to derive a Hilbert-projective contraction for the
+gauge-fixed representative on general Polish spaces, from which uniform convergence of
+the gauge-fixed log-potentials, geometric convergence of the dual objective value, and
+total-variation convergence of the primal coupling all follow as consequences. The
+Hilbert projective metric is the natural tool for this, as it is invariant under
+multiplication by positive scalars \cite[Lemma~2.1(iv)]{Lemmens2013BirkhoffsVO}, making
+such global rescalings invisible at the level of distances.
+
+Convergence is quantified in Hilbert's projective metric $d_{\mathrm H}$ on the positive cones $\operatorname{L}^\infty_{++}(\mathcal X)$ and $\operatorname{L}^\infty_{++}(\mathcal Y)$ of essentially bounded functions with positive essential infimum, in the sense of Birkhoff's version on cones \cite[Equation~(2.2)]{Lemmens2013BirkhoffsVO}.
+
+\begin{theorem}
+  \label{theoreme_linear_rate_scaled_hilbert}
+  Let $(\hat{u}, \hat{v})$ be the unique maximizing pair for
+  \eqref{dual_maversion_fonctionnelle_C} satisfying \eqref{transform_pour_u} and
+  \eqref{transform_pour_v}, and let $\hat{a} \triangleq e^{\hat{u}/\alpha}$,
+  $\hat{b} \triangleq e^{\hat{v}/\alpha}$. The scaled iterates of
+  Algorithm~\ref{algo_2_scaled} satisfy, for all $l \geq 0$,
+  \begin{align}
+    \label{linear_speed_1}
+    d_{\mathrm{H}}\!\left(b^{(l)}, \hat{b}\right)
+    &\leq
+    \left(\rho_{(\mathsf{c},\alpha,\beta)}\right)^{l}
+    d_{\mathrm{H}}\!\left(b^{(0)}, \hat{b}\right),
+    \\
+    \label{linear_speed_2}
+    d_{\mathrm{H}}\!\left(a^{(l+1)}, \hat{a}\right)
+    &\leq
+    \tanh\!\left(\frac{\|\mathsf{c}\|_\infty}{\alpha}\right)
+    \left(\rho_{(\mathsf{c},\alpha,\beta)}\right)^{l}
+    d_{\mathrm{H}}\!\left(b^{(0)}, \hat{b}\right),
+  \end{align}
+  where $d_{\mathrm H}$ is Hilbert's projective metric \cite[Equation~(2.2)]{Lemmens2013BirkhoffsVO} and
+  \begin{align}
+    \label{formule_rho}
+    \rho_{(\mathsf{c},\alpha,\beta)}
+    \triangleq
+    \frac{\beta}{\alpha+\beta}
+    \tanh\!\left(\frac{\|\mathsf{c}\|_\infty}{\alpha}\right)^{\!2}.
+  \end{align}
+\end{theorem}
+The proof is detailed in Appendix~\ref{app:convergence}. The proof rests on the contraction principle for positive linear operators in Hilbert's projective metric: the kernels associated with $\Xi$ and $\Gamma$ have finite projective diameter and are therefore strict contractions for $d_{\mathrm H}$ by \cite[Theorem~2.9]{Lemmens2013BirkhoffsVO}. The normalization built into $\Gamma$ identifies a complete slice of the positive cone on which the one-step map $\Gamma\circ\Xi$ is a contraction with rate $\rho_{(\mathsf{c},\alpha,\beta)}$, and Banach's fixed-point theorem then yields the geometric convergence.
+
+
+Note that initializing the scaled algorithm with $b^{(0)} = 1$ is a natural and canonical choice. Indeed, since $\hat{b} = e^{\hat{v}/\alpha}$, the initial Hilbert distance simplifies to $d_{\mathrm{H}}(1, \hat{b}) = \operatorname{osc}(\hat{v})/\alpha$, explicitly quantifying how a smaller regularization parameter $\alpha$ increases the initial distance to the fixed point.
+
+
+This linear rate convergence transfers directly to the dual objective value (see Corollary~\ref{corollaire_convergence_objectif}), the unscaled log-domain potentials $(u^{(l)}, v^{(l)})$ in $L^\infty$ (see Corollary~\ref{corollaire_convergence_potentiels}), and the associated primal iterates in total variation (see Corollary~\ref{corollaire_convergence_mesure_primale}). All formal statements and their respective proofs are detailed in Appendix~\ref{app:convergence}.
+
+\subsection{Approximation Error}
+\label{sec:approx_error}
+
+In classical entropic OT, the gap between the regularized and unregularized values has
+been studied in \cite{carlier2017convergence, pal2024difference}. The present section
+establishes an analogue for doubly-regularized SROT, quantifying the effect of $\alpha$
+and $\beta$ separately. A subtlety specific to the semi-relaxed setting is that the KL
+penalty on the second marginal forces the optimal coupling to be absolutely continuous
+with respect to $P\otimes Q$, so the regularized problem can only converge to unregularized
+minimizers whose second marginal is absolutely continuous with respect to $Q$. This
+motivates introducing the restricted value
+\begin{align}
+  \label{eq:def_srot_q_main_text}
+  SROT_Q
+  \triangleq
+  \inf\left\{
+    \int_{\mathcal{X}\times\mathcal{Y}} \mathsf{c}(x,y)\,\mathrm{d}\pi(x,y)
+    \;:\;
+    \pi\in\Pi(P,\star),
+    \;\pi\ll P\otimes Q
+  \right\},
+\end{align}
+which satisfies $SROT_Q \geq SROT$ in general, with equality whenever the unregularized
+problem can be approximated by couplings absolutely continuous with respect to $P\otimes Q$.
+Note that $SROT_Q$ coincides with $SROT$ under mild conditions (e.g., full support of $Q$ and continuous costs, or in the discrete setting with full support). This is formally stated and proven in Appendix~\ref{app:approx_error}, see Lemma~\ref{lemme_srotq_equals_srot}.
+Intuitively, the gap $SROT_Q \geq SROT$ can only be strict when the pointwise minimizers in $y$ lie in $Q$-null regions of $\mathcal{Y}$. Full support of $Q$ rules this out, while continuity of $\mathsf{c}(x,\cdot)$ ensures that near-minimizers form an open set, which therefore carries positive $Q$-mass and forces equality.
+The reference measure $Q$ should therefore be chosen to have full support on
+$\mathcal{Y}$ whenever possible, as this ensures that the regularized values converge to
+the correct unregularized target. The importance of this choice is further underlined by
+the explicit bounds in the following theorem.
+
+\subsubsection{Convergence in Value}
+
+\begin{theorem}
+  \label{theoreme_value_convergence_all_limits}
+  Recall the definitions of $SROT$ in \eqref{primal_non_regularise}, of $SROT_Q$ in \eqref{eq:def_srot_q_main_text}, and of $SROT_{\alpha,\beta}$ in \eqref{primal_avec_2_KL}. The two following assertions hold.
+  \begin{enumerate}
+    \item Without any additional assumptions,
+    \begin{align}
+      \label{convergence_sans_bornes_en_valeur}
+      SROT_{\alpha,\beta}
+      \xrightarrow[\alpha,\beta\to 0]{}
+      SROT_Q.
+    \end{align}
+    In particular, if $SROT_Q = SROT$ (for instance under the assumptions of
+    Lemma~\ref{lemme_srotq_equals_srot}), then $SROT_{\alpha,\beta}
+    \xrightarrow[\alpha,\beta\to 0]{} SROT$.
+
+    \item Assume that there exists $\tilde\pi \in \Pi(P,\star)$ such that
+    \begin{align}
+      \label{condition_pour_bornes_par_KL_sur_alpha_et_beta}
+      \int_{\mathcal{X}\times\mathcal{Y}}
+        \mathsf{c}(x,y)\,\mathrm{d}\tilde\pi(x,y) = SROT,
+      \qquad
+      D_{KL}(\tilde\pi \| P\otimes Q) < +\infty.
+    \end{align}
+    Then $D_{KL}(\tilde\pi_{\#}^{\mathcal{Y}} \| Q) < +\infty$ and
+    \begin{align}
+      \label{bornes_par_KL_sur_alpha_et_beta}
+      0
+      \leq
+      SROT_{\alpha,\beta} - SROT
+      \leq
+      \alpha \, D_{KL}(\tilde\pi \| P\otimes Q)
+      +
+      \beta \, D_{KL}(\tilde\pi_{\#}^{\mathcal{Y}} \| Q).
+    \end{align}
+  \end{enumerate}
+\end{theorem}
+The proof is detailed in Appendix~\ref{app:approx_error}. The convergence~\eqref{convergence_sans_bornes_en_valeur} in the first assertion is established through two matching inequalities. The lower bound $SROT_{\alpha,\beta} \geq SROT_Q$ is immediate, since the entropic term $\alpha D_{\mathrm{KL}}(\pi \| P\otimes Q)$ in \eqref{primal_avec_2_KL} forces any coupling with finite regularized cost to be absolutely continuous with respect to $P\otimes Q$, which is precisely the feasible set defining $SROT_Q$ in \eqref{eq:def_srot_q_main_text}. The matching upper bound $\limsup_{\alpha,\beta\to 0} SROT_{\alpha,\beta} \leq SROT_Q$ is obtained by evaluating the regularized objective $\mathsf{P}_{\alpha,\beta}$ in \eqref{primal_avec_2_KL} at a Gibbs kernel $\pi^\tau \propto e^{-\mathsf{c}/\tau}$ and balancing the cost approximation against the KL penalties through the choice $\tau = \sqrt{\alpha+\beta}$. The quantitative bound~\eqref{bornes_par_KL_sur_alpha_et_beta} in the second assertion then follows directly by evaluating $\mathsf{P}_{\alpha,\beta}$ at the candidate $\tilde\pi$ provided by hypothesis~\eqref{condition_pour_bornes_par_KL_sur_alpha_et_beta}.
+
+A discussion of the hypotheses and scope of each assertion follows. The convergence~\eqref{convergence_sans_bornes_en_valeur} requires no assumption beyond the standing ones and is the weakest of the two results: it establishes convergence to $SROT_Q$ defined in \eqref{eq:def_srot_q_main_text}, not to the unregularized value $SROT$ defined in \eqref{primal_non_regularise}. The gap $SROT_Q - SROT$ closes to zero precisely under the conditions of Lemma~\ref{lemme_srotq_equals_srot}. The quantitative bound~\eqref{bornes_par_KL_sur_alpha_et_beta} strengthens this to an explicit $\mathcal{O}(\alpha + \beta)$ rate, but at the cost of requiring an unregularized $SROT$ minimizer $\tilde\pi$ that is absolutely continuous with respect to $P\otimes Q$; this bound separates the contributions of $\alpha$ and $\beta$ through the respective KL divergences and vanishes as both parameters tend to zero. A canonical setting in which the hypothesis~\eqref{condition_pour_bornes_par_KL_sur_alpha_et_beta} holds is the discrete case with finite $\mathcal{X}$ and $\mathcal{Y}$ and $Q(\{y_j\}) > 0$ for every $j$: every feasible coupling then has finite KL divergence against $P\otimes Q$, so the existence of an admissible $\tilde\pi$ in \eqref{condition_pour_bornes_par_KL_sur_alpha_et_beta} is automatic.
+
+Partial limits, in which only one of the two parameters is sent to zero, are deferred to Proposition~\ref{proposition_partial_limits} in Appendix~\ref{app:approx_error}. These regimes are of lesser practical relevance here, since the Sinkhorn algorithm developed in this paper requires both $\alpha$ and $\beta$ to be strictly positive.
+\subsubsection{Convergence of the Minimizer}
+
+The value convergence established in Theorem~\ref{theoreme_value_convergence_all_limits}
+is a prerequisite for the weak convergence result below: the hypothesis
+$SROT_{\alpha_n,\beta_n} \to SROT$ holds whenever $SROT_Q = SROT$ and both parameters
+tend to zero, which is guaranteed in particular under the conditions of
+Lemma~\ref{lemme_srotq_equals_srot}. When $SROT_Q > SROT$ instead, that is, when $Q$
+lacks full support or the cost is discontinuous, the regularized values converge to
+$SROT_Q$ rather than $SROT$, and the hypothesis fails; in that case the same argument
+identifies weak limit points as minimizers of the restricted problem associated with
+$SROT_Q$.
+
+Tightness of the family $(\hat\pi_{\alpha_n,\beta_n})_{n\geq 1}$ holds automatically
+when $\mathcal{Y}$ is compact, since every Borel probability measure on a compact metric
+space is tight \cite[Theorem~5.1]{billingsley1999convergence}. Uniform entropy bounds
+with respect to $P\otimes Q$ also imply tightness via a standard relative entropy argument
+\cite{billingsley1999convergence, budhiraja2019relative}.
+
+Under the conditions above, every weak limit point of $(\hat\pi_{\alpha_n,\beta_n})_{n\geq 1}$ is a minimizer of the unregularized semi-relaxed problem~\eqref{primal_non_regularise}, and the entire sequence converges weakly to $\pi^\star$ whenever this minimizer is unique. The formal statement and proof are deferred to Theorem~\ref{theoreme_weak_convergence_general} in Appendix~\ref{app:approx_error}.
+
+This result is primarily of theoretical interest: it confirms that the regularized
+minimizers are consistent with the unregularized problem, but it provides neither a rate
+of convergence nor a norm-level control. In particular, the weak topology does not
+distinguish between minimizers when several exist. The quantitative complement below
+addresses both of these limitations in the discrete setting.
+
+In finite spaces, a stronger $L^1$ control is available. For each row $i$, let $m_i \triangleq \min_j \mathsf{c}(x_i,y_j)$ and $\Gamma_i \triangleq \{j : \mathsf{c}(x_i,y_j) = m_i\}$. Assuming each row is non-constant, the row-separation gap
+\begin{align}
+  \label{definition_delta}
+  \Delta \triangleq \min_i \min_{j \notin \Gamma_i} \bigl(\mathsf{c}(x_i,y_j) - m_i\bigr)
+\end{align}
+is strictly positive.
+
+\begin{theorem}
+  \label{theoreme_l1_control_discrete}
+  Assume that $\mathcal{X} = \{x_1,\dots,x_n\}$ and $\mathcal{Y} = \{y_1,\dots,y_m\}$
+  are finite, with $p_i \triangleq P(\{x_i\})$ and $q_j \triangleq Q(\{y_j\}) > 0$ for
+  all $j \in \{1,\dots,m\}$. Assume that each row of the cost matrix is non-constant. Define the
+  set of unregularized minimizers
+  \begin{align}
+    \mathcal{O}
+    \triangleq
+    \bigl\{
+      \pi \in \Pi(P,\star)
+      :
+      \pi(x_i, y_j) = 0
+      \text{ for all } i \in \{1,\dots,n\},\, j \notin \Gamma_i
+    \bigr\}.
+  \end{align}
+  Then $\mathcal{O}$ is the set of minimizers of \eqref{primal_non_regularise} and
+  \begin{align}
+    \inf_{\pi\in\mathcal{O}}
+    \|\hat\pi_{\alpha,\beta} - \pi\|_1
+    \leq
+    \frac{2}{\Delta}
+    \bigl(SROT_{\alpha,\beta} - SROT\bigr).
+  \end{align}
+  If each row admits a unique minimizer, then $\mathcal{O} = \{\pi^\star\}$ and
+  \begin{align}
+    \|\hat\pi_{\alpha,\beta} - \pi^\star\|_1
+    \leq
+    \frac{2}{\Delta}
+    \bigl(SROT_{\alpha,\beta} - SROT\bigr)
+    \leq
+    \frac{2}{\Delta}
+    \Bigl(
+      \alpha\, D_{KL}(\pi^\star \| P\otimes Q)
+      +
+      \beta\, D_{KL}\bigl((\pi^\star)_{\#}^{\mathcal{Y}} \| Q\bigr)
+    \Bigr).
+  \end{align}
+\end{theorem}
+The proof is detailed in Appendix~\ref{app:approx_error}. The argument first uses the row-separation gap $\Delta$ in \eqref{definition_delta} to convert the primal cost excess $SROT_{\alpha,\beta} - SROT$ into a bound on the total mass that $\hat\pi_{\alpha,\beta}$ places outside the optimal columns $(\Gamma_i)_{i=1}^n$, and then projects $\hat\pi_{\alpha,\beta}$ onto $\mathcal{O}$ by reallocating each row's off-optimal mass to a single optimal column, which doubles the off-optimal mass into the $L^1$ distance and yields the factor $2/\Delta$; the second inequality then follows by applying the quantitative bound~\eqref{bornes_par_KL_sur_alpha_et_beta} of Theorem~\ref{theoreme_value_convergence_all_limits} with $\tilde\pi = \pi^\star$.
+
+Theorem~\ref{theoreme_l1_control_discrete} gives a key quantitative consequence of this analysis. In the discrete case, it simultaneously provides an explicit $\operatorname{L}^1$ distance to the set of unregularized minimizers, an $\mathcal{O}(\alpha + \beta)$ rate when a unique minimizer exists, and a separation of the contributions of $\alpha$ and $\beta$ through the KL terms. The hypotheses (full support of $Q$, non-constant rows) are both necessary in a precise sense: dropping full support of $Q$ allows $SROT_Q > SROT$, while a constant row prevents any $L^1$ control since the minimizer is then not isolated in the transport polytope. The row-separation gap $\Delta$ defined in \eqref{definition_delta} is a static constant determined solely by the ground-truth cost matrix $\mathsf{c}$; it depends neither on the regularization parameters $\alpha,\beta$ nor on the iterates produced by the algorithm. The convergence dynamics in Theorem~\ref{theoreme_l1_control_discrete} are therefore driven cleanly by $\alpha,\beta \to 0$ at the robust $\mathcal{O}(\alpha+\beta)$ rate, while $1/\Delta$ enters merely as a fixed geometric multiplier. This $1/\Delta$ dependency is not a flaw of the Gauge-Fixed Sinkhorn algorithm, but a fundamental property of exact, unregularized optimal transport, which is a linear program over the transport polytope. Geometrically, in exact OT, placing one unit of mass on a suboptimal target $y_j$ with $j \notin \Gamma_i$ incurs a cost penalty of at least $\Delta$ relative to the optimal assignment, and the $L^1$ distance counts each unit of misplaced mass twice: once subtracted from the optimal target $y_{j_i} \in \Gamma_i$, once added to the suboptimal one. Consequently,
+\begin{align}
+L^1\text{ distance} \;\leq\; 2 \times (\text{misplaced mass}) \;\leq\; \tfrac{2}{\Delta} \times (\text{cost excess}).
+\end{align}
+This factor $2/\Delta$ is intrinsically sharp, as demonstrated by a toy example given in Appendix~\ref{app:approx_error} at the end of the proof of Theorem~\ref{theoreme_l1_control_discrete}.
+
+Although the $L^1$ norm furnishes a universal discrete bound, it acts as a discrete metric and is therefore blind to the underlying geometry of the cost $\mathsf{c}$, treating all suboptimal assignments on equal footing. Deriving a geometry-aware Wasserstein bound requires further structural assumptions on the cost; this limitation is discussed as a future direction in Section~\ref{sec:conclusion}.
+
+Combining the algorithmic and approximation results of this section yields a clean separation of the two error sources for the dual functional value. Geometric convergence of the dual objective value is established in Corollary~\ref{corollaire_convergence_objectif} from the Hilbert-projective contraction of Theorem~\ref{theoreme_linear_rate_scaled_hilbert}, while the regularization bias is controlled by Theorem~\ref{theoreme_value_convergence_all_limits}. Under the hypothesis~\eqref{condition_pour_bornes_par_KL_sur_alpha_et_beta} of an unregularized $SROT$ minimizer $\tilde\pi$ with finite KL divergence against $P\otimes Q$, the dual value evaluated along the iterates of Algorithm~\ref{algo_2_scaled} therefore admits a decomposition of the form
+\begin{align}
+  |\mathsf{D}_{\alpha,\beta}(u^{(l)}, v^{(l)}) - SROT|
+  \leq
+  \underbrace{C_{\mathrm{opt}}\, \rho_{(\mathsf{c},\alpha,\beta)}^{l}}_{\text{optimization error}}
+  +
+  \underbrace{\alpha\, D_{KL}(\tilde\pi \| P\otimes Q) + \beta\, D_{KL}(\tilde\pi^{\mathcal{Y}}_{\#} \| Q)}_{\text{regularization bias}},
+\end{align}
+where the first term is the geometric optimization error inherited from Theorem~\ref{theoreme_linear_rate_scaled_hilbert} (with $\rho_{(\mathsf{c},\alpha,\beta)}$ and $C_{\mathrm{opt}}$ as therein), and the second is the bias of the doubly-regularized objective with respect to the unregularized value, which separates the contributions of $\alpha$ and $\beta$ explicitly. In particular, choosing $\alpha,\beta$ small reduces the bias at the cost of degrading the contraction factor, while increasing the iteration index $l$ reduces the optimization error at fixed bias.
+
+
+
+
+
+\section{Experiments}
+\label{sec:experiments}
+\textcolor{red}{CHECKER QUIL NY A PAS MON NOM DANS LE CODE. il faut bien preciser que la baseline que j'appelle "chizat" est aussi celle que les autres auteurs (les japonais) ont appelé SR Sinkhorn et RS Sinkhorn (les robust trucs). Notre algorithme offre des performances équivalentes ou légèrement supérieures à l'état de l'art sur des géométries euclidiennes simples. Cependant, il surpasse largement la baseline dans les régimes difficiles (faible régularisation entropique $\alpha$, grandes dimensions, et coûts non-euclidiens), démontrant une bien meilleure stabilité numérique de la jauge.Dire qu'on a utilisé un nb fixe d'itérations} A voir si on compare au solveuur des japonais avec le franck block wolfe coordinate method,vu que ce n'est pas la même régularisation. 
+\section{Conclusions and Limitations}
+\label{sec:conclusion}
+A primary limitation of the present quantitative analysis is the reliance on the $L^1$ distance in Theorem~\ref{theoreme_l1_control_discrete}, which is fundamentally blind to the geometry of the cost space. An important direction for future work is the derivation of a geometry-aware Wasserstein-distance control. This appears feasible if the static row-separation gap $\Delta$ is replaced by a Łojasiewicz-type growth condition on the cost, $\mathsf{c}(x,y) - \mathsf{c}(x,T(x)) \geq \kappa\, d_{\mathcal{Y}}(y,T(x))^p$. The main obstacle for this extension in infinite dimensions is the possible singularity of the unregularized minimizer with respect to $Q$, whose careful treatment is left for future work.
+
+Several other limitations should be made explicit. First, the contraction factor of Theorem~\ref{theoreme_linear_rate_scaled_hilbert} depends on the cost scale relative to the entropic regularization parameter $\alpha$, and degenerates as $\alpha \to 0$; the proven rate is therefore informative in the moderately regularized regime rather than near the unregularized limit. A sharper, shift-invariant formulation of the contraction factor in terms of the cost oscillation rather than its sup-norm may be considered in a separate dedicated pass. Second, the simultaneous limit $\alpha,\beta \to 0$ is, in general, a limit toward the restricted value $SROT_Q$ rather than toward $SROT$ itself, with equality $SROT_Q = SROT$ guaranteed only under the support and continuity conditions discussed in Section~\ref{sec:approx_error}; absent such conditions, the proven approximation results identify weak limit points as minimizers of the restricted problem. Third, the quantitative $L^1$ minimizer bound of Theorem~\ref{theoreme_l1_control_discrete} is finite-dimensional and depends on the row-separation gap $\Delta$, so it is most informative when the cost matrix has well-separated row minima and degrades as the rows approach degeneracy. Finally, the experimental claims (Section~\ref{sec:experiments}) are limited to the regimes tested and should not be extrapolated to substantially different geometries, dimensions, or scales.
+
+\begin{ack}
+  This work was supported by INRIA and the French National Research Agency.
+\end{ack}
+
+\bibliographystyle{plainnat}
+\bibliography{biblio3}
+
+\appendix
+
+\section{Weak Duality}
+\textcolor{red}{QUAND MEME DANS L'ANNEXE IL FAUDRA AJOUTER DES PHRASES QUI EXPLIQUENT CE QU ON FAIT. PAS TRES COMPLIQUE MAIS SURTOUT DANS LA PARTIE SUR LE DUAL ATTAINMENT OU PAS MAL DE LEMMES SONT INTRODUITS DANS L ANNEXE.}
+\label{app:weak_duality}
+
+%\subsection{Proof of Lemma~\ref{lemme_dualite_faible}}
+
+\begin{lemma}
+  \label{lemme_dualite_faible}
+  Weak duality holds between the primal problem in \eqref{primal_avec_2_KL} and the dual problem in \eqref{dual_maversion_fonctionnelle_C}. More precisely,
+  
+  \begin{IEEEeqnarray}{rCl}
+    \sup_{u\in \operatorname{L}^\infty(\mathcal X),\, v\in \operatorname{L}^\infty(\mathcal Y)}
+    \mathsf{D}_{\alpha,\beta}(u,v)
+    \leq
+    \inf_{\pi\in \Pi(P,\star)}
+    \mathsf{P}_{\alpha,\beta}(\pi)
+    <+\infty .
+  \end{IEEEeqnarray}
+\end{lemma}
+
+\begin{IEEEproof}
+  Let $\pi \in \Pi(P, \star)$ be any feasible measure for problem \eqref{primal_avec_2_KL}; that is
+  $\mathsf{P}_{\alpha,\beta}(\pi)<+\infty$. Then $\pi\ll P\otimes Q$ and
+  $\pi_{\#}^{\mathcal Y}\ll Q$. Let $(u, v) \in \operatorname{L}^\infty(\mathcal X) \times \operatorname{L}^\infty(\mathcal Y)$ be arbitrary potentials. 
+The Gibbs variational inequality for the Kullback--Leibler divergence, also known as the Donsker--Varadhan variational formula, see \cite[Lemma~2.1]{donsker1975asymptotic}, yields, for all bounded measurable function $h$,
+
+  \begin{IEEEeqnarray}{rCl}
+  \label{EqMai1at17h56in2026LaCadiere}
+    D_{\operatorname{KL}}(\mu||\nu)
+    &\geq&
+    \int h \,\mathrm{d}\mu
+    - \log\left(\int e^h \,\mathrm{d}\nu\right),
+  \end{IEEEeqnarray}
+  
+  where $\mu$ and $\nu$ are probability measures. Applying this inequality with
+  \[
+    h(x,y)=\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha},
+  \]
+  $\mu=\pi$, and $\nu=P\otimes Q$, gives
+  
+  \begin{IEEEeqnarray}{rCl}
+   \label{EqMai1at17h58in2026LaCadiere}
+    \nonumber
+    \alpha D_{\operatorname{KL}}(\pi||P\otimes Q)
+    &\geq&
+    \int_{\mathcal X\times \mathcal Y}
+    \bigl(u(x)+v(y)-\mathsf{c}(x,y)\bigr)
+    \mathrm{d}\pi(x,y) \\
+    &&
+    -\alpha
+    \log\left(
+    \int_{\mathcal X\times \mathcal Y}
+    e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}
+    \mathrm{d}P\otimes Q(x,y)
+    \right).
+  \end{IEEEeqnarray}
+  
+  Similarly, when
+  $h(y)=-v(y)/\beta$, $\mu=\pi_{\#}^{\mathcal Y}$, and $\nu=Q$, the inequality in \eqref{EqMai1at17h56in2026LaCadiere} yields
+  
+  \begin{IEEEeqnarray}{rCl}
+  \label{EqMai1at17h59in2026LaCadiere}
+    \beta D_{\operatorname{KL}}(\pi_{\#}^{\mathcal Y}||Q)
+    &\geq&
+    -\int_{\mathcal Y} v(y)\,
+    \mathrm{d}\pi_{\#}^{\mathcal Y}(y)
+    -\beta
+    \log\left(
+    \int_{\mathcal Y}
+    e^{-\frac{v(y)}{\beta}}
+    \mathrm{d}Q(y)
+    \right).
+  \end{IEEEeqnarray}
+  
+  Adding the inequalities in \eqref{EqMai1at17h58in2026LaCadiere} and \eqref{EqMai1at17h59in2026LaCadiere} to the primal cost term $\int \mathsf{c}(x,y) \mathrm{d}\pi(x,y)$ yields
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{EqMay1at18h10in2026LaCadiere}
+    \nonumber
+    \mathsf{P}_{\alpha,\beta}(\pi)
+    &\geq&
+    \int_{\mathcal X\times\mathcal Y}
+    \bigl(u(x)+v(y)\bigr)
+    \mathrm{d}\pi(x,y)
+    -\int_{\mathcal Y} v(y)
+    \mathrm{d}\pi_{\#}^{\mathcal Y}(y)\\
+    &&
+    -\alpha
+    \log\left(
+    \int_{\mathcal X\times \mathcal Y}
+    e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}
+    \mathrm{d}P\otimes Q(x,y)
+    \right)
+    -\beta
+    \log\left(
+    \int_{\mathcal Y}
+    e^{-\frac{v(y)}{\beta}}
+    \mathrm{d}Q(y)
+    \right).
+  \end{IEEEeqnarray}
+  
+  Since $\pi_{\#}^{\mathcal X}=P$, it holds that
+  
+  \begin{IEEEeqnarray}{rCl}
+  \label{EqMay1at18h13in2026LaCadiere}
+    \int_{\mathcal X\times\mathcal Y}
+    \bigl(u(x)+v(y)\bigr)
+    \mathrm{d}\pi(x,y)
+    =
+    \int_{\mathcal X} u(x)\mathrm{d}P(x)
+    +
+    \int_{\mathcal Y} v(y)
+    \mathrm{d}\pi_{\#}^{\mathcal Y}(y).
+  \end{IEEEeqnarray}
+  
+  Substituting \eqref{EqMay1at18h13in2026LaCadiere} into \eqref{EqMay1at18h10in2026LaCadiere} implies the cancellation of the terms involving $v$, and therefore
+  
+  \begin{IEEEeqnarray}{rCl}
+  \label{EqMay1at18h25in2026LaCadiere}
+    \mathsf{P}_{\alpha,\beta}(\pi)
+    &\geq&
+    \int_{\mathcal X} u(x)\mathrm{d}P(x)
+    -\alpha
+    \log\left(
+    \int_{\mathcal X\times \mathcal Y}
+    e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}
+    \mathrm{d}P\otimes Q(x,y)
+    \right) \nonumber\\
+    &&
+    -\beta
+    \log\left(
+    \int_{\mathcal Y}
+    e^{-\frac{v(y)}{\beta}}
+    \mathrm{d}Q(y)
+    \right)\\
+    &=&
+    \mathsf{D}_{\alpha,\beta}(u,v).
+  \end{IEEEeqnarray}
+  
+  Since the inequality in \eqref{EqMay1at18h25in2026LaCadiere} holds for all feasible $\pi$ and all bounded potentials $(u,v)$, it then follows that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \sup_{u,v}\mathsf{D}_{\alpha,\beta}(u,v)
+    \leq
+    \inf_{\pi\in \Pi(P,\star)}
+    \mathsf{P}_{\alpha,\beta}(\pi).
+  \end{IEEEeqnarray}
+
+  It remains to prove that the primal value, $\mathsf{P}_{\alpha,\beta}(P\otimes Q)$, is finite. Since $P\otimes Q\in\Pi(P,\star)$ and
+  $D_{\operatorname{KL}}(P\otimes Q||P\otimes Q)=0$, it holds that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \mathsf{P}_{\alpha,\beta}(P\otimes Q)
+    =
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf{c}(x,y)\mathrm{d}P\otimes Q(x,y)
+    <+\infty,
+  \end{IEEEeqnarray}
+  
+    which follows from the boundedness of $\mathsf{c}$. This completes the proof.
+\end{IEEEproof}
+
+\section{Dual Attainment: Technical Lemmas}
+\label{app:dual_attainment}
+
+\subsection{Preliminaries for the Proof of Dual Attainment}
+%\subsection{Lemma~\ref{lemme_propriete_de_ma_fonctionnelle_duale}: Translation Invariance of the Dual Functional}
+
+\begin{lemma}
+  \label{lemme_propriete_de_ma_fonctionnelle_duale}
+  For all functions $u\in \operatorname{L}^\infty(\mathcal X)$ and
+  $v\in \operatorname{L}^\infty(\mathcal Y)$, and for all real numbers
+  $M,N\in\mathbb R$, the dual functional $\mathsf{D}_{\alpha,\beta}$ in
+  \eqref{dual_maversion_fonctionnelle_C} satisfies
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{propriete_invariance_fonctionnelle_duale}
+    \mathsf{D}_{\alpha,\beta}(u+M,v+N)
+    =
+    \mathsf{D}_{\alpha,\beta}(u,v).
+  \end{IEEEeqnarray}
+\end{lemma}
+
+\begin{IEEEproof}
+  Consider the functions $u\in \operatorname{L}^\infty(\mathcal X)$ and
+  $v\in \operatorname{L}^\infty(\mathcal Y)$; and  the reals $M,N\in\mathbb R$.
+  Consider also the problem in \eqref{dual_maversion_fonctionnelle_C},
+  
+  \begin{IEEEeqnarray}{rCl}
+  \nonumber
+  \sup_{u\in \operatorname{L}^\infty(\mathcal X), v \in \operatorname{L}^\infty(\mathcal{Y})}\ \mathsf{D}_{\alpha,\beta}(u,v) \triangleq &&\int_{\mathcal{X}} u(x)\mathrm{d}P(x) - \beta \log\left(\int_{\mathcal{Y}}e^{-\frac{v(y)}{\beta}}\mathrm{d}Q(y)\right) \\ &&-\alpha \log\left(\int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}P\otimes Q(x,y)\right) 
+\end{IEEEeqnarray}
+
+   from which it follows that
+   
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \mathsf{D}_{\alpha,\beta}(u+M,v+N)
+    &=&
+    \int_{\mathcal X} u(x)\mathrm{d}P(x)+M -\beta\log\left(
+    \int_{\mathcal Y}
+    e^{-\frac{v(y)+N}{\beta}}
+    \mathrm{d}Q(y)
+    \right)\\
+    &&
+    -\alpha\log\left(
+    \int_{\mathcal X\times\mathcal Y}
+    e^{\frac{u(x)+M+v(y)+N-\mathsf{c}(x,y)}{\alpha}}
+    \mathrm{d}P\otimes Q(x,y)
+    \right)\\
+    &=&
+    \nonumber
+    \int_{\mathcal X} u(x)\mathrm{d}P(x)+M -\beta\log\left(
+    e^{-\frac{N}{\beta}}
+    \int_{\mathcal Y}
+    e^{-\frac{v(y)}{\beta}}
+    \mathrm{d}Q(y)
+    \right)\\
+   && -\alpha\log\left(
+    e^{\frac{M+N}{\alpha}}
+    \int_{\mathcal X\times\mathcal Y}
+    e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}
+    \mathrm{d}P\otimes Q(x,y)
+    \right)\\
+    \nonumber
+    &=&
+    \int_{\mathcal X} u(x)\mathrm{d}P(x)+M-(M+N)+N    
+    -\beta\log\left(
+    \int_{\mathcal Y}
+    e^{-\frac{v(y)}{\beta}}
+    \mathrm{d}Q(y)
+    \right)\\
+    &&
+    -\alpha\log\left(
+    \int_{\mathcal X\times\mathcal Y}
+    e^{\frac{u(x)+v(y)-\mathsf{c}(x,y)}{\alpha}}
+    \mathrm{d}P\otimes Q(x,y)
+    \right)\\
+    &=&
+    \mathsf{D}_{\alpha,\beta}(u,v).
+  \end{IEEEeqnarray}
+  
+  This completes the proof.
+\end{IEEEproof}
+
+
+
+\begin{lemma}
+  \label{lemme_differentiation}
+  The dual functional $\mathsf{D}_{\alpha,\beta}$ in
+  \eqref{dual_maversion_fonctionnelle_C} is G\^ateaux differentiable on
+  $\operatorname{L}^\infty(\mathcal X)\times
+  \operatorname{L}^\infty(\mathcal Y)$. Moreover, for all
+  $(u,v)\in \operatorname{L}^\infty(\mathcal X)\times
+  \operatorname{L}^\infty(\mathcal Y)$ and all directions
+  $(a,b)\in \operatorname{L}^\infty(\mathcal X)\times
+  \operatorname{L}^\infty(\mathcal Y)$, it holds that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{differentielle_de_C_par_rapport_a_u}
+    \left\langle
+    \frac{\partial \mathsf{D}_{\alpha,\beta}(u,v)}{\partial u},
+    a
+    \right\rangle
+    &=&
+    \int_{\mathcal X}
+    a(x)
+    \left(
+    1-
+    \frac{1}{Z(u,v)}
+    \int_{\mathcal Y}
+    e^{\frac{u(x)+v(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dQ(y)
+    \right)
+    \mathrm dP(x);
+    \\
+    \label{differentielle_de_C_par_rapport_a_v}
+    \left\langle
+    \frac{\partial \mathsf{D}_{\alpha,\beta}(u,v)}{\partial v},
+    b
+    \right\rangle
+    &=&
+    \int_{\mathcal Y}
+    b(y)
+    \left(
+    \frac{e^{-\frac{v(y)}{\beta}}}{R(v)}
+    -
+    \frac{1}{Z(u,v)}
+    \int_{\mathcal X}
+    e^{\frac{u(x)+v(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dP(x)
+    \right)
+    \mathrm dQ(y),
+  \end{IEEEeqnarray}
+  
+  where
+  
+  \begin{IEEEeqnarray}{rCl}
+    Z(u,v)
+    &\triangleq&
+    \int_{\mathcal X\times\mathcal Y}
+    e^{\frac{u(x)+v(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dP\otimes Q(x,y),
+    \\
+    R(v)
+    &\triangleq&
+    \int_{\mathcal Y}
+    e^{-\frac{v(y)}{\beta}}
+    \mathrm dQ(y).
+  \end{IEEEeqnarray}
+\end{lemma}
+
+\begin{IEEEproof}
+  Consider $(u,v)\in \operatorname{L}^\infty(\mathcal X)\times
+  \operatorname{L}^\infty(\mathcal Y)$ and
+  $(a,b)\in \operatorname{L}^\infty(\mathcal X)\times
+  \operatorname{L}^\infty(\mathcal Y)$. Since the functions $u,v,a,b$ and $\mathsf c$ are
+  bounded, the quantities $Z(u,v)$ and $R(v)$ are finite and strictly positive.
+
+  First, consider the derivative of $\mathsf{D}_{\alpha,\beta}(u,v)$ in \eqref{dual_maversion_fonctionnelle_C} with respect to $u$. The linear term satisfies
+  
+  \begin{IEEEeqnarray}{rCl}
+  \label{EqMay2at9h38in2026LaCadiere}
+    \left.\frac{\mathrm d}{\mathrm dt}\right|_{t=0}
+    \int_{\mathcal X}
+    \bigl(u(x)+t a(x)\bigr)\mathrm dP(x)
+    =
+    \int_{\mathcal X}a(x)\mathrm dP(x).
+  \end{IEEEeqnarray}
+  
+  The term involving $R(v)$ does not depend on $u$. Hence it remains to
+  differentiate the term involving $Z(u,v)$. By dominated convergence
+  \cite[Theorem~1.34]{rudin1987real},
+  
+  \begin{IEEEeqnarray}{rCl}
+  \label{EqMay2at9h32in2026LaCadiere}
+    \left.\frac{\mathrm d}{\mathrm dt}\right|_{t=0}
+    Z(u+ta,v)
+    &=&
+    \frac{1}{\alpha}
+    \int_{\mathcal X\times\mathcal Y}
+    a(x)
+    e^{\frac{u(x)+v(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dP\otimes Q(x,y).
+  \end{IEEEeqnarray}
+  
+  Therefore, the chain rule for the logarithm yields,
+  
+  \begin{IEEEeqnarray}{rCl}
+  \label{EqMay2at9h32in2026LaCadiereA}
+    \left.\frac{\mathrm d}{\mathrm dt}\right|_{t=0}
+    \bigl(-\alpha\log Z(u+ta,v)\bigr)
+    &=&
+    -
+    \frac{1}{Z(u,v)}
+    \int_{\mathcal X\times\mathcal Y}
+    a(x)
+    e^{\frac{u(x)+v(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dP\otimes Q(x,y)\\
+    \label{EqMay2at9h32in2026LaCadiereB}
+    &=&
+     -
+    \int_{\mathcal X}
+    a(x)
+    \left(
+    \frac{1}{Z(u,v)}
+    \int_{\mathcal Y}
+    e^{\frac{u(x)+v(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dQ(y)
+    \right)
+    \mathrm dP(x),
+  \end{IEEEeqnarray}
+  
+  where the equality \eqref{EqMay2at9h32in2026LaCadiereB} in follows from the Fubini's theorem \cite[Theorem~8.8]{rudin1987real}.
+Combining \eqref{EqMay2at9h38in2026LaCadiere} and \eqref{EqMay2at9h32in2026LaCadiereB} concludes the proof of \eqref{differentielle_de_C_par_rapport_a_u}.
+%The differentiation with respect to $v$ is handled analogously. The term $\int_{\mathcal X} u\,\mathrm dP$ in \eqref{dual_maversion_fonctionnelle_C} does not depend on $v$.
+
+It remains to compute the derivative of $\mathsf{D}_{\alpha,\beta}(u,v)$ in \eqref{dual_maversion_fonctionnelle_C} with respect to $v$. The term
+  $\int_{\mathcal X}u\,\mathrm dP$ does not depend on $v$. From the dominated
+  convergence and the chain rule of the logarithm, it follows that 
+  
+  \begin{IEEEeqnarray}{rCl}
+   \label{EqMay2at09h43in2026LaCadiere}
+    \left.\frac{\mathrm d}{\mathrm dt}\right|_{t=0}
+    \left(
+    -\beta
+    \log
+    \int_{\mathcal Y}
+    e^{-\frac{v(y)+tb(y)}{\beta}}
+    \mathrm dQ(y)
+    \right)
+    &=&
+    \frac{1}{R(v)}
+    \int_{\mathcal Y}
+    b(y)e^{-\frac{v(y)}{\beta}}
+    \mathrm dQ(y).
+  \end{IEEEeqnarray}
+  
+  Similarly,
+  
+  \begin{IEEEeqnarray}{rCl}
+    \left.\frac{\mathrm d}{\mathrm dt}\right|_{t=0}
+    \bigl(-\alpha\log Z(u,v+tb)\bigr)
+    &=&
+    -
+    \frac{1}{Z(u,v)}
+    \int_{\mathcal X\times\mathcal Y}
+    b(y)
+    e^{\frac{u(x)+v(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dP\otimes Q(x,y)
+    \\
+    \label{EqMay2at09h44in2026LaCadiere}
+    &=&
+    -
+    \int_{\mathcal Y}
+    b(y)
+    \left(
+    \frac{1}{Z(u,v)}
+    \int_{\mathcal X}
+    e^{\frac{u(x)+v(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dP(x)
+    \right)
+    \mathrm dQ(y),
+  \end{IEEEeqnarray}
+  
+  where the equality in \eqref{EqMay2at09h44in2026LaCadiere} follows from Fubini's theorem \cite[Theorem~8.8]{rudin1987real}. Combining \eqref{EqMay2at09h43in2026LaCadiere} and \eqref{EqMay2at09h44in2026LaCadiere} concludes the proof of \eqref{differentielle_de_C_par_rapport_a_v}. This
+completes the proof.
+\end{IEEEproof}
+
+%\subsection{Corollary~\ref{corollaire_transform}: Optimality Conditions and Update Operators}
+
+\begin{corollary}
+  \label{corollaire_transform}
+  Let $(\hat u,\hat v)\in \operatorname{L}^\infty(\mathcal X)\times \operatorname{L}^\infty(\mathcal Y)$, and let $\Phi$ and $\Psi$ be the operators defined in \eqref{formule_de_phi} and \eqref{formule_de_psi}. If $\hat u$ satisfies the optimality condition \eqref{transform_pour_u} (understood $P$-almost everywhere), then $\hat u$ maximizes $u\mapsto \mathsf{D}_{\alpha,\beta}(u,\hat v)$, where $\mathsf{D}_{\alpha,\beta}$ is defined in \eqref{dual_maversion_fonctionnelle_C}. Similarly, if $\hat v$ satisfies \eqref{transform_pour_v} (understood $Q$-almost everywhere), then $\hat v$ maximizes $v\mapsto \mathsf{D}_{\alpha,\beta}(\hat u,v)$. Moreover, if \eqref{transform_pour_u} and \eqref{transform_pour_v} are simultaneously satisfied, then $(\hat u,\hat v)$ maximizes $(u,v)\mapsto \mathsf{D}_{\alpha,\beta}(u,v)$.
+\end{corollary}
+
+\begin{IEEEproof}
+  The functional  $\mathsf{D}_{\alpha,\beta}$ in
+  \eqref{dual_maversion_fonctionnelle_C} is concave and differentiable on
+  $\operatorname{L}^\infty(\mathcal X)\times
+  \operatorname{L}^\infty(\mathcal Y)$ and in particular concave with respect to each variable when the other one is fixed. As a consequence, a sufficient condition for optimality is the vanishing of the first-order derivative \cite[Chapter~2.4]{convexanalysis}.
+  
+Assume that $\hat v\in L^\infty(\mathcal Y)$ is fixed and that $\hat u$ satisfies \eqref{transform_pour_u}. By Lemma~\ref{lemme_differentiation}, the first-order derivative of the map $u\mapsto \mathsf{D}_{\alpha,\beta}(u,\hat v)$ is given by \eqref{differentielle_de_C_par_rapport_a_u}. Injecting \eqref{transform_pour_u} into this expression shows that the derivative vanishes identically. By concavity, $\hat u$ therefore maximizes $u\mapsto \mathsf{D}_{\alpha,\beta}(u,\hat v)$.
+
+Similarly, assume that $\hat u\in L^\infty(\mathcal X)$ is fixed and that $\hat v$ satisfies \eqref{transform_pour_v}. Using again Lemma~\ref{lemme_differentiation}, the derivative of $v\mapsto \mathsf{D}_{\alpha,\beta}(\hat u,v)$ is given by \eqref{differentielle_de_C_par_rapport_a_v}. Injecting \eqref{transform_pour_v} into this expression yields the cancellation of the two terms and thus the vanishing of the derivative. By concavity, $\hat v$ maximizes $v\mapsto \mathsf{D}_{\alpha,\beta}(\hat u,v)$.
+
+Finally, if \eqref{transform_pour_u} and \eqref{transform_pour_v} are satisfied simultaneously, then both partial derivatives vanish. Since $(u,v)\mapsto \mathsf{D}_{\alpha,\beta}(u,v)$ is jointly concave, $(\hat u,\hat v)$ is a global maximizer of $\mathsf{D}_{\alpha,\beta}$.
+\end{IEEEproof}
+
+%\subsection{Lemma~\ref{lemme_osc_inegalites}: Oscillation Bounds}
+The following lemma gives uniform oscillation bounds for the update operators.
+\begin{lemma}
+  \label{lemme_osc_inegalites}
+  For every pair of functions $(u,v)$ in
+  $\operatorname{L}^\infty(\mathcal X)\times
+  \operatorname{L}^\infty(\mathcal Y)$, the operators $\Phi$ in
+  \eqref{formule_de_phi} and $\Psi$ in \eqref{formule_de_psi} satisfy
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{inegalite_osc_phi}
+    \operatorname{osc}(\Phi(v))
+    &\leq&
+    2\|\mathsf c\|_\infty;
+    \\
+    \label{inegalite_osc_psi}
+    \operatorname{osc}(\Psi(u))
+    &\leq&
+    \frac{2\beta}{\alpha+\beta}\|\mathsf c\|_\infty.
+  \end{IEEEeqnarray}
+\end{lemma}
+
+\begin{IEEEproof}
+  The proof is divided into two parts, corresponding to
+  \eqref{inegalite_osc_phi} and \eqref{inegalite_osc_psi}. Let $v$ be a function in $\operatorname{L}^\infty(\mathcal{Y})$. For all
+  $(x,y)\in \mathcal X\times\mathcal Y$, it holds that
+  
+  \begin{IEEEeqnarray}{rCl}
+    &&-\|\mathsf c\|_\infty
+   \leq
+    -\mathsf c(x,y)
+    \leq
+    \|\mathsf c\|_\infty\\
+    & \Longleftrightarrow&
+    e^{-\frac{\|\mathsf c\|_\infty}{\alpha}}
+    e^{\frac{v(y)}{\alpha}}
+    \leq
+    e^{\frac{v(y)-\mathsf c(x,y)}{\alpha}}
+    \leq
+    e^{\frac{\|\mathsf c\|_\infty}{\alpha}}
+    e^{\frac{v(y)}{\alpha}}\\
+    \label{EqMay2at10h38in2026LaCadiere}
+   & \Longleftrightarrow& e^{-\frac{\|\mathsf c\|_\infty}{\alpha}}
+    \int_{\mathcal Y}e^{\frac{v(y)}{\alpha}}\mathrm dQ(y)
+    \leq
+    \int_{\mathcal Y}
+    e^{\frac{v(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dQ(y)
+    \label{ligne_de_calcul_qui_sert_dans_2_preuves}
+    \leq
+    e^{\frac{\|\mathsf c\|_\infty}{\alpha}}
+    \int_{\mathcal Y}e^{\frac{v(y)}{\alpha}}\mathrm dQ(y)\\
+    \label{EqMay2at10h40in2026LaCadiere}
+    &\Longleftrightarrow&  -\alpha
+    \log\left(
+    \int_{\mathcal Y}e^{\frac{v(y)}{\alpha}}\mathrm dQ(y)
+    \right)
+    -\|\mathsf c\|_\infty
+    \leq
+    \Phi(v)(x)
+    \leq
+    -\alpha
+    \log\left(
+    \int_{\mathcal Y}e^{\frac{v(y)}{\alpha}}\mathrm dQ(y)
+    \right)
+    +\|\mathsf c\|_\infty, 
+  \end{IEEEeqnarray}
+  
+  where the inequalities in \eqref{ligne_de_calcul_qui_sert_dans_2_preuves} follow by integrating with respect to $Q$ in \eqref{EqMay2at10h38in2026LaCadiere}; and the inequalities in \eqref{EqMay2at10h40in2026LaCadiere} follow by the logarithm and multiplying by $-\alpha$ in \eqref{ligne_de_calcul_qui_sert_dans_2_preuves}.
+%
+From \eqref{EqMay2at10h40in2026LaCadiere} it follows that $\operatorname{osc}(\Phi(v))\leq 2\|\mathsf c\|_\infty$, which concludes the proof of \eqref{inegalite_osc_phi}
+
+It remains to prove \eqref{inegalite_osc_psi}. Let $u$ be a function in
+$\operatorname{L}^\infty(\mathcal X)$ and define
+
+\begin{IEEEeqnarray}{rCl}
+  B_u(y)
+  &\triangleq&
+  \int_{\mathcal X}
+  e^{\frac{u(x)-\mathsf c(x,y)}{\alpha}}
+  \mathrm dP(x),
+  \\
+  C_u
+  &\triangleq&
+  \int_{\mathcal Y}
+  B_u(y')^{\frac{\alpha}{\alpha+\beta}}
+  \mathrm dQ(y').
+\end{IEEEeqnarray}
+
+From \eqref{formule_de_psi}, it holds that
+
+\begin{IEEEeqnarray}{rCl}
+  \Psi(u)(y)
+  =
+  \beta\log(C_u)
+  -
+  \frac{\alpha\beta}{\alpha+\beta}\log(B_u(y)).
+\end{IEEEeqnarray}
+
+Since the term $\beta\log(C_u)$ does not depend on $y$, it has zero
+oscillation. Hence,
+
+\begin{IEEEeqnarray}{rCl}
+  \operatorname{osc}(\Psi(u))
+  =
+  \frac{\alpha\beta}{\alpha+\beta}
+  \operatorname{osc}\bigl(\log(B_u)\bigr).
+\end{IEEEeqnarray}
+
+For all $(x,y)\in \mathcal X\times\mathcal Y$, it holds that
+
+\begin{IEEEeqnarray}{rCl}
+  &&-\|\mathsf c\|_\infty
+  \leq
+  -\mathsf c(x,y)
+  \leq
+  \|\mathsf c\|_\infty\\
+  &\Longleftrightarrow&
+  e^{-\frac{\|\mathsf c\|_\infty}{\alpha}}
+  e^{\frac{u(x)}{\alpha}}
+  \leq
+  e^{\frac{u(x)-\mathsf c(x,y)}{\alpha}}
+  \leq
+  e^{\frac{\|\mathsf c\|_\infty}{\alpha}}
+  e^{\frac{u(x)}{\alpha}}\\
+  \label{EqMay2at10h38in2026LaCadierePsi}
+  &\Longleftrightarrow&
+  e^{-\frac{\|\mathsf c\|_\infty}{\alpha}}
+  \int_{\mathcal X}e^{\frac{u(x)}{\alpha}}\mathrm dP(x)
+  \leq
+  \int_{\mathcal X}
+  e^{\frac{u(x)-\mathsf c(x,y)}{\alpha}}
+  \mathrm dP(x)
+  \leq
+  e^{\frac{\|\mathsf c\|_\infty}{\alpha}}
+  \int_{\mathcal X}e^{\frac{u(x)}{\alpha}}\mathrm dP(x)\\
+  \label{EqMay2at10h40in2026LaCadierePsi}
+  &\Longleftrightarrow&
+  \log\left(
+  \int_{\mathcal X}e^{\frac{u(x)}{\alpha}}\mathrm dP(x)
+  \right)
+  -
+  \frac{\|\mathsf c\|_\infty}{\alpha}
+  \leq
+  \log(B_u(y))
+  \leq
+  \log\left(
+  \int_{\mathcal X}e^{\frac{u(x)}{\alpha}}\mathrm dP(x)
+  \right)
+  +
+  \frac{\|\mathsf c\|_\infty}{\alpha},
+\end{IEEEeqnarray}
+
+where the inequalities in \eqref{EqMay2at10h38in2026LaCadierePsi} follow by
+integrating with respect to $P$; and the inequalities in
+\eqref{EqMay2at10h40in2026LaCadierePsi} follow by taking the logarithm.
+From \eqref{EqMay2at10h40in2026LaCadierePsi}, it follows that
+
+\begin{IEEEeqnarray}{rCl}
+  \operatorname{osc}\bigl(\log(B_u)\bigr)
+  \leq
+  \frac{2\|\mathsf c\|_\infty}{\alpha}.
+\end{IEEEeqnarray}
+
+Consequently,
+
+\begin{IEEEeqnarray}{rCl}
+  \operatorname{osc}(\Psi(u))
+  &\leq&
+  \frac{\alpha\beta}{\alpha+\beta}
+  \frac{2\|\mathsf c\|_\infty}{\alpha}
+  =
+  \frac{2\beta}{\alpha+\beta}\|\mathsf c\|_\infty,
+\end{IEEEeqnarray}
+
+which proves \eqref{inegalite_osc_psi}. This completes the proof.
+\end{IEEEproof}
+
+%\subsection{Lemma~\ref{lemme_controle_inegalites}: Uniform Bounds on the Operators}
+The following lemma shows uniform bounds on the operators.
+\begin{lemma}
+  \label{lemme_controle_inegalites}
+  For all pair of functions $(u,v)$ in $\operatorname{L}^\infty(\mathcal X) \times \operatorname{L}^\infty(\mathcal{Y}) $, the operators $\Phi$ in \eqref{formule_de_phi} and $\Psi$ in \eqref{formule_de_psi} satisfy
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{inegalite_mon_dual_1}
+    &&\|\Phi(v)\|_\infty \leq \|v\|_\infty + \|\mathsf c\|_\infty; \\
+    \label{inegalite_mon_dual_2}
+    &&\|\Psi(u)\|_\infty \leq \frac{2\beta}{\alpha+\beta} \|\mathsf c\|_\infty.
+  \end{IEEEeqnarray}
+\end{lemma}
+
+
+\begin{IEEEproof}
+  The proof is divided into two parts, corresponding to
+  \eqref{inegalite_mon_dual_1} and \eqref{inegalite_mon_dual_2}. Let $v$ be a
+  function in $\operatorname{L}^\infty(\mathcal Y)$. For all
+  $(x,y)\in \mathcal X\times\mathcal Y$, it holds that
+  
+  \begin{IEEEeqnarray}{rCl}
+    &&
+    -\frac{\|v\|_\infty+\|\mathsf c\|_\infty}{\alpha}
+    \leq
+    \frac{v(y)-\mathsf c(x,y)}{\alpha}
+    \leq
+    \frac{\|v\|_\infty+\|\mathsf c\|_\infty}{\alpha}
+    \\
+    &\Longleftrightarrow&
+    e^{-\frac{\|v\|_\infty+\|\mathsf c\|_\infty}{\alpha}}
+    \leq
+    e^{\frac{v(y)-\mathsf c(x,y)}{\alpha}}
+    \leq
+    e^{\frac{\|v\|_\infty+\|\mathsf c\|_\infty}{\alpha}}
+    \\
+    \label{EqControlePhiIntegration}
+    &\Longleftrightarrow&
+    e^{-\frac{\|v\|_\infty+\|\mathsf c\|_\infty}{\alpha}}
+    \leq
+    \int_{\mathcal Y}
+    e^{\frac{v(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dQ(y)
+    \leq
+    e^{\frac{\|v\|_\infty+\|\mathsf c\|_\infty}{\alpha}}
+    \\
+    \label{EqControlePhiLog}
+    &\Longleftrightarrow&
+    -\|v\|_\infty-\|\mathsf c\|_\infty
+    \leq
+    \Phi(v)(x)
+    \leq
+    \|v\|_\infty+\|\mathsf c\|_\infty,
+  \end{IEEEeqnarray}
+  
+  where the inequalities in \eqref{EqControlePhiIntegration} follow by integrating
+  with respect to $Q$, and the inequalities in \eqref{EqControlePhiLog} follow
+  by taking the logarithm and multiplying by $-\alpha$. Hence,
+  
+  \begin{IEEEeqnarray}{rCl}
+    \|\Phi(v)\|_\infty
+    \leq
+    \|v\|_\infty+\|\mathsf c\|_\infty,
+  \end{IEEEeqnarray}
+  
+  which proves \eqref{inegalite_mon_dual_1}.
+
+  It remains to prove \eqref{inegalite_mon_dual_2}. Let $u$ be a function in
+  $\operatorname{L}^\infty(\mathcal X)$ and note that the definition of $\Psi$ in \eqref{formule_de_psi} implies 
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{normalisation_pour_psi_app}
+    \int_{\mathcal Y} e^{-\Psi (u)(y) / \beta} \mathrm{d}Q(y) = 1.
+  \end{IEEEeqnarray}
+  
+  As the measure $Q$ has total mass $1$, the previous equality implies 
+  
+  \begin{IEEEeqnarray}{rCl}
+    \inf_{y \in \mathcal{Y}} e^{-\Psi(u)(y)/\beta} \leq 1, \text{ and  }\sup_{y \in \mathcal{Y}} e^{-\Psi(u)(y)/\beta} \geq 1.
+  \end{IEEEeqnarray}
+  
+   Monotonicity of the logarithm function yields
+   
+  \begin{IEEEeqnarray}{rCl}
+    \sup \Psi(u) \geq 0 \quad \text{and} \quad \inf \Psi(u) \leq 0.
+  \end{IEEEeqnarray}
+  
+  The interval $[\inf \Psi(u), \sup \Psi(u)]$ contains the origin. The distance from the origin to any point within a closed interval is bounded through the total interval length. The following inequalities result from this inclusion
+  
+  \begin{IEEEeqnarray}{rCl}
+    \sup \Psi(u) \leq \operatorname{osc}(\Psi(u)) \quad \text{and} \quad -\inf \Psi(u) \leq \operatorname{osc}(\Psi(u)).
+  \end{IEEEeqnarray}
+  
+  The definition $\|\Psi(u)\|_\infty = \max(\sup \Psi(u), -\inf \Psi(u))$ establishes the bound $\|\Psi(u)\|_\infty \leq \operatorname{osc}(\Psi(u))$. Since the oscillation bound in \eqref{inegalite_osc_psi} is established as $\frac{2\beta}{\alpha+\beta} \|\mathsf c\|_\infty$, this concludes the proof of \eqref{inegalite_mon_dual_2}.
+\end{IEEEproof}
+
+%\subsection{Corollary~\ref{corollaire_existence_de_mieux_bornes}: Reduction to Bounded Potentials}
+The following corollary reduces the maximization problem to uniformly bounded potentials.
+\begin{corollary}
+  \label{corollaire_existence_de_mieux_bornes}
+  Let $(u,v)$ be a pair of functions in
+  $\operatorname{L}^\infty(\mathcal X)\times
+  \operatorname{L}^\infty(\mathcal Y)$. Then, there exists another pair
+  $(f,g)$ in
+  $\operatorname{L}^\infty(\mathcal X)\times
+  \operatorname{L}^\infty(\mathcal Y)$ such that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \mathsf{D}_{\alpha,\beta}(u,v)
+    \leq
+    \mathsf{D}_{\alpha,\beta}(f,g),
+    \qquad
+    \|f\|_\infty,\|g\|_\infty
+    \leq
+    2\|\mathsf c\|_\infty,
+  \end{IEEEeqnarray}
+  
+  where $\mathsf{D}_{\alpha,\beta}$ is defined in
+  \eqref{dual_maversion_fonctionnelle_C}.
+\end{corollary}
+
+\begin{IEEEproof}
+  Let $(u,v)$ be a pair of functions in
+  $\operatorname{L}^\infty(\mathcal X)\times
+  \operatorname{L}^\infty(\mathcal Y)$. From
+  Corollary~\ref{corollaire_transform}, the function $\Phi(v)$ maximizes
+  the map $u\mapsto \mathsf{D}_{\alpha,\beta}(u,v)$. Hence,
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{borne_duale_apres_phi}
+    \mathsf{D}_{\alpha,\beta}(u,v)
+    \leq
+    \mathsf{D}_{\alpha,\beta}(\Phi(v),v).
+  \end{IEEEeqnarray}
+  
+  Moreover, Lemma~\ref{lemme_osc_inegalites} gives
+  
+  \begin{IEEEeqnarray}{rCl}
+    \operatorname{osc}(\Phi(v))
+    \leq
+    2\|\mathsf c\|_\infty.
+  \end{IEEEeqnarray}
+  
+  Therefore, there exists a constant $A\in\mathbb R$ such that the function
+  $f\triangleq \Phi(v)+A$ satisfies
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{borne_f_corollaire}
+    \|f\|_\infty
+    \leq
+    2\|\mathsf c\|_\infty.
+  \end{IEEEeqnarray}
+  
+  By Lemma~\ref{lemme_propriete_de_ma_fonctionnelle_duale}, the dual
+  functional is invariant under constant shifts of the potentials. Thus,
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{invariance_apres_centrage}
+    \mathsf{D}_{\alpha,\beta}(\Phi(v),v)
+    =
+    \mathsf{D}_{\alpha,\beta}(f,v).
+  \end{IEEEeqnarray}
+
+  Let now $g\triangleq \Psi(f)$. From
+  Corollary~\ref{corollaire_transform}, the function $g$ maximizes the map
+  $v\mapsto \mathsf{D}_{\alpha,\beta}(f,v)$. Hence,
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{borne_duale_apres_psi}
+    \mathsf{D}_{\alpha,\beta}(f,v)
+    \leq
+    \mathsf{D}_{\alpha,\beta}(f,g).
+  \end{IEEEeqnarray}
+  
+  Moreover, Lemma~\ref{lemme_controle_inegalites} gives
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{borne_g_corollaire}
+    \|g\|_\infty
+    =
+    \|\Psi(f)\|_\infty
+    \leq
+    \frac{2\beta}{\alpha+\beta}\|\mathsf c\|_\infty
+    \leq
+    2\|\mathsf c\|_\infty.
+  \end{IEEEeqnarray}
+  
+  Combining \eqref{borne_duale_apres_phi},
+  \eqref{invariance_apres_centrage}, and \eqref{borne_duale_apres_psi}
+  yields
+  
+  \begin{IEEEeqnarray}{rCl}
+    \mathsf{D}_{\alpha,\beta}(u,v)
+    \leq
+    \mathsf{D}_{\alpha,\beta}(f,g).
+  \end{IEEEeqnarray}
+  
+  Finally, \eqref{borne_f_corollaire} and \eqref{borne_g_corollaire} imply
+  that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \|f\|_\infty,\|g\|_\infty
+    \leq
+    2\|\mathsf c\|_\infty.
+  \end{IEEEeqnarray}
+  
+  This completes the proof.
+\end{IEEEproof}
+
+\subsection{Proof of Theorem~\ref{theoreme_dual_attainment}}
+
+%\begin{IEEEproof}
+  Let $(u_n)\subset \operatorname{L}^\infty(\mathcal X)$ and
+  $(v_n)\subset \operatorname{L}^\infty(\mathcal{Y})$ be maximizing
+  sequences. It follows from
+  Corollary~\ref{corollaire_existence_de_mieux_bornes} that $(u_n)$ and
+  $(v_n)$ can be chosen such that for all $n$, it holds that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \|u_n\|_\infty,\|v_n\|_\infty
+    \leq
+    2\|\mathsf c\|_\infty .
+  \end{IEEEeqnarray}
+  
+  Since $\mathcal X$ and $\mathcal Y$ are Polish spaces, the spaces
+  $\operatorname{L}^1(P)$ and $\operatorname{L}^1(Q)$ are separable. Hence,
+  the closed balls of
+  $\operatorname{L}^\infty(\mathcal X)$ and
+  $\operatorname{L}^\infty(\mathcal Y)$ are weak$^*$ compact and metrizable.
+  Application of the Banach--Alaoglu theorem
+  \cite[Theorem~3.16]{brezissobolev} yields existence of subsequences
+  $(u_{n_k})_k$ and $(v_{n_k})_k$ such that
+  
+  \begin{IEEEeqnarray}{rCl}
+    u_{n_k}
+    \rightharpoonup^*
+    \overline{u}
+    \text{ in } \operatorname{L}^\infty(\mathcal X),
+    \text{ and }
+    v_{n_k}
+    \rightharpoonup^*
+    \overline{v}
+    \text{ in } \operatorname{L}^\infty(\mathcal Y).
+  \end{IEEEeqnarray}
+  
+  In particular, the following weak$^*$ convergence also holds in
+  $\operatorname{L}^\infty(\mathcal X\times\mathcal Y)$:
+  
+  \begin{IEEEeqnarray}{rCl}
+    u_{n_k}+v_{n_k}-\mathsf c
+    \rightharpoonup^*
+    \overline u+\overline v-\mathsf c.
+  \end{IEEEeqnarray}
+  
+  Moreover, for all $h\in \operatorname{L}^1(\mathcal X\times\mathcal Y,P\otimes Q)$,
+  Fubini's theorem implies that
+  $x\mapsto \int_{\mathcal Y}h(x,y)\mathrm dQ(y)$ belongs to
+  $\operatorname{L}^1(P)$ and
+  $y\mapsto \int_{\mathcal X}h(x,y)\mathrm dP(x)$ belongs to
+  $\operatorname{L}^1(Q)$.
+ 
+ Thus, it follows from the convexity of $\exp$ and the weak$^*$ lower
+  semi-continuity of the integral functionals in the dual objective in
+  \eqref{dual_maversion_fonctionnelle_C} \cite[Theorem~3.7]{brezissobolev}  that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \liminf_{k\to\infty}
+    \int_{\mathcal Y}
+    e^{-\frac{v_{n_k}(y)}{\beta}}\mathrm dQ(y)
+    &\geq&
+    \int_{\mathcal Y}
+    e^{-\frac{\overline v(y)}{\beta}}\mathrm dQ(y);
+    \text{ and }
+    \\
+    \middlesqueezeequAggressive
+    \liminf_{k\to\infty}
+    \int_{\mathcal X\times\mathcal Y}
+    e^{\frac{u_{n_k}(x)+v_{n_k}(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dP\otimes Q(x,y)
+    &\geq&
+    \middlesqueezeequAggressive
+    \int_{\mathcal X\times\mathcal Y}
+    e^{\frac{\overline u(x)+\overline v(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dP\otimes Q(x,y).
+  \end{IEEEeqnarray}
+  
+  From the continuity and monotonicity of $\log$ on $(0,\infty)$ and the two
+  previous inequalities, it follows that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{i_1}
+    &&
+    \liminf_{k\to\infty}
+    \log\left(
+    \int_{\mathcal Y}
+    e^{-\frac{v_{n_k}(y)}{\beta}}
+    \mathrm dQ(y)
+    \right)
+    \geq
+    \log\left(
+    \int_{\mathcal Y}
+    e^{-\frac{\overline v(y)}{\beta}}
+    \mathrm dQ(y)
+    \right);
+    \text{ and }
+    \\
+    &&
+    \liminf_{k\to\infty}
+    \log\left(
+    \int_{\mathcal X\times\mathcal Y}
+    e^{\frac{u_{n_k}(x)+v_{n_k}(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dP\otimes Q(x,y)
+    \right)
+    \label{i_2}
+    \geq
+    \middlesqueezeequBrutal
+    \log\left(
+    \int_{\mathcal X\times\mathcal Y}
+    e^{\frac{\overline u(x)+\overline v(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dP\otimes Q(x,y)
+    \right).
+  \end{IEEEeqnarray}
+  
+  From which it can be deduced that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \middlesqueezeequAggressive
+    \sup_{u\in \operatorname{L}^\infty(\mathcal X),
+    v\in \operatorname{L}^\infty(\mathcal Y)}
+    \mathsf D_{\alpha,\beta}(u,v)
+    \nonumber
+    &=&
+    \middlesqueezeequAggressive
+    \lim_{k\to\infty}
+    \Bigg[
+    \int_{\mathcal X}u_{n_k}(x)\mathrm dP(x)
+    -
+    \beta
+    \log\left(
+    \int_{\mathcal Y}
+    e^{-\frac{v_{n_k}(y)}{\beta}}
+    \mathrm dQ(y)
+    \right)
+    \\
+    &&
+    \middlesqueezeequAggressive
+    -
+    \alpha
+    \log\left(
+    \int_{\mathcal X\times\mathcal Y}
+    e^{\frac{u_{n_k}(x)+v_{n_k}(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dP\otimes Q(x,y)
+    \right)
+    \Bigg]
+    \\
+    \nonumber
+    \label{i_3}
+    &\leq&
+    \lim_{k\to\infty}
+    \Bigg[
+    \int_{\mathcal X}u_{n_k}(x)\mathrm dP(x)
+    \Bigg]
+    -
+    \beta
+    \liminf_{k\to\infty}
+    \Bigg[
+    \log\left(
+    \int_{\mathcal Y}
+    e^{-\frac{v_{n_k}(y)}{\beta}}
+    \mathrm dQ(y)
+    \right)
+    \Bigg]
+    \\
+    &&
+    \middlesqueezeequBrutal
+    -
+    \alpha~
+    \liminf_{k\to\infty}
+    \Bigg[
+    \log\left(
+    \int_{\mathcal X\times\mathcal Y}
+    e^{\frac{u_{n_k}(x)+v_{n_k}(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dP\otimes Q(x,y)
+    \right)
+    \Bigg].
+  \end{IEEEeqnarray}
+  
+  It follows from the weak$^*$ convergence of $(u_{n_k})$ to $\overline u$
+  that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \lim_{k\to\infty}
+    \Bigg[
+    \int_{\mathcal X}u_{n_k}(x)\mathrm dP(x)
+    \Bigg]
+    =
+    \int_{\mathcal X}\overline u(x)\mathrm dP(x).
+  \end{IEEEeqnarray}
+  
+  Combining \eqref{i_1}, \eqref{i_2}, \eqref{i_3} and the previous equality
+  yields
+  
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \middlesqueezeequAggressive
+    \sup_{u\in \operatorname{L}^\infty(\mathcal X),
+    v\in \operatorname{L}^\infty(\mathcal Y)}
+    \mathsf D_{\alpha,\beta}(u,v)
+    &\leq&
+    \int_{\mathcal X}\overline u(x)\mathrm dP(x)
+    -
+    \beta
+    \log\left(
+    \int_{\mathcal Y}
+    e^{-\frac{\overline v(y)}{\beta}}
+    \mathrm dQ(y)
+    \right)
+    \\
+    &&
+    -
+    \alpha
+    \log\left(
+    \int_{\mathcal X\times\mathcal Y}
+    e^{\frac{\overline u(x)+\overline v(y)-\mathsf c(x,y)}{\alpha}}
+    \mathrm dP\otimes Q(x,y)
+    \right).
+  \end{IEEEeqnarray}
+  
+  Equivalently,
+  
+  \begin{IEEEeqnarray}{rCl}
+    \sup_{u\in \operatorname{L}^\infty(\mathcal X),
+    v\in \operatorname{L}^\infty(\mathcal Y)}
+    \mathsf D_{\alpha,\beta}(u,v)
+    \leq
+    \mathsf D_{\alpha,\beta}(\overline u,\overline v),
+  \end{IEEEeqnarray}
+  
+  which follows from the definition of the supremum. Hence,
+  $(\overline u,\overline v)$ is a maximizer of
+  $\mathsf D_{\alpha,\beta}$, which concludes the proof that the supremum in
+  \eqref{dual_maversion_fonctionnelle_C} is attained.
+
+  It remains to show that any
+  $(\hat u,\hat v)\in
+  \operatorname{L}^\infty(\mathcal X)\times
+  \operatorname{L}^\infty(\mathcal Y)$ satisfying
+  \eqref{transform_pour_u} and \eqref{transform_pour_v} is a maximizer of
+  $\mathsf D_{\alpha,\beta}$ in
+  \eqref{dual_maversion_fonctionnelle_C}. This follows directly from
+  Corollary~\ref{corollaire_transform}, since simultaneous satisfaction of
+  \eqref{transform_pour_u} and \eqref{transform_pour_v} implies that
+  $(\hat u,\hat v)$ is a global maximizer of
+  $(u,v)\mapsto \mathsf D_{\alpha,\beta}(u,v)$. This completes the proof.
+%\end{IEEEproof}
+
+\section{Primal Attainment}
+\label{app:primal_attainment}
+
+\subsection{Theorem~\ref{theoreme_attainment_primal}}
+
+\begin{theorem}
+  \label{theoreme_attainment_primal}
+  The infimum in problem \eqref{primal_avec_2_KL} is attained at a unique measure
+  $\hat{\pi} \in \Pi(P,\star)$. Moreover, $\hat{\pi}$ is absolutely continuous with
+  respect to $P\otimes Q$, and its density satisfies
+  \begin{IEEEeqnarray}{rCl}
+    \label{definition_minimizeur_du_primal}
+    \frac{\mathrm{d}\hat{\pi}}{\mathrm{d}P\otimes Q}(x,y)
+    &=&
+    e^{\frac{\hat{u}(x)}{\alpha}}
+    e^{-\frac{\mathsf{c}(x,y)}{\alpha}}
+    e^{\frac{\hat{v}(y)}{\alpha}},
+  \end{IEEEeqnarray}
+  where $(\hat{u}, \hat{v})$ is the unique pair of maximizing potentials satisfying
+  \eqref{transform_pour_u} and \eqref{transform_pour_v}.
+\end{theorem}
+
+The result is a consequence of Theorem~\ref{theoreme_dual_attainment}: the entropic penalty $\alpha D_{\mathrm{KL}}(\pi \| P\otimes Q)$ forces any coupling with finite primal value to be absolutely continuous with respect to $P\otimes Q$, and the first-order optimality conditions in the dual potentials then pin down the Gibbs-type density~\eqref{definition_minimizeur_du_primal}. Uniqueness follows from the strict convexity of the KL penalty.
+%\begin{IEEEproof}
+  Let $(\hat u,\hat v) \in \operatorname{L}^\infty(\mathcal X)\times \operatorname{L}^\infty(\mathcal Y)$ be a pair of maximizing potentials for problem \eqref{dual_maversion_fonctionnelle_C} satisfying \eqref{transform_pour_u} and \eqref{transform_pour_v}. Define $\hat \pi$ as in \eqref{definition_minimizeur_du_primal}. Let $\hat \rho$ denote the density $\frac{\mathrm{d}\hat \pi}{\mathrm{d}P\otimes Q}$ and $\hat s$ denote the density $\frac{\mathrm{d}\hat \pi_{\#}^{\mathcal Y}}{\mathrm{d}Q}$. Condition \eqref{transform_pour_u} ensures that 
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{normalisation_1_ds_preuve}
+    \int_{\mathcal Y} \hat \rho (x,y)\mathrm{d}Q(y) \eqas{P} 1.
+  \end{IEEEeqnarray}
+  
+  Thus, for any integrable function $f \in \operatorname{L}^1(\mathcal{X})$, Fubini's theorem \cite[Theorem~8.8]{rudin1987real} yields
+  
+  \begin{IEEEeqnarray}{rCl}
+    \middlesqueezeequAggressive
+        \int_{\mathcal X \times \mathcal Y} f(x)\mathrm{d}\hat{\pi}(x,y) = \int_{\mathcal X} f(x)\left( \int_{\mathcal Y} \hat \rho (x,y)\mathrm{d}Q(y) \right) \mathrm{d}P(x) = \int_{\mathcal X} f(x)\mathrm{d}P(x).
+  \end{IEEEeqnarray}
+  
+  Hence, the measure $\hat \pi$ is a probability measure with first marginal $\hat \pi_{\#}^{\mathcal X} = P$, which implies $\hat \pi \in \Pi(P, \star)$. Besides, the optimality condition \eqref{transform_pour_v} implies
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{normalisation_2_ds_preuve}
+    \int_{\mathcal Y} e^{\frac{-\hat v(y)}{\beta}} \mathrm{d}Q(y) = 1, \text{ and } \hat s(y) \eqas{Q} e^{\frac{-\hat v(y)}{\beta}}.
+  \end{IEEEeqnarray}
+  
+    From \eqref{normalisation_1_ds_preuve} and \eqref{normalisation_2_ds_preuve}, the dual objective $\mathsf{D}_{\alpha,\beta}(\hat u, \hat v)$, with $\mathsf{D}_{\alpha,\beta}$ in \eqref{dual_maversion_fonctionnelle_C}, can be computed as follows 
+    
+    \begin{IEEEeqnarray}{rCl}
+      \nonumber
+       \mathsf{D}_{\alpha,\beta}(\hat u, \hat v) &=& \int_{\mathcal{X}} \hat u(x)\mathrm{d}P(x) - \beta \log\left(\int_{\mathcal{Y}}e^{-\frac{\hat v(y)}{\beta}}\mathrm{d}Q(y)\right) \\ &&-\alpha \log\left(\int_{\mathcal{X} \times \mathcal{Y}}e^{\frac{\hat u(x)+\hat v(y)-\mathsf{c}(x,y)}{\alpha}}\mathrm{d}P\otimes Q(x,y)\right) \\ \label{dual_simplif_preuve}
+       &=& \int_{\mathcal{X}} \hat u(x)\mathrm{d}P(x) - \beta \log(1) -\alpha\log(1) = \int_{\mathcal{X}} \hat u(x)\mathrm{d}P(x).
+    \end{IEEEeqnarray}
+    
+    From \eqref{primal_avec_2_KL}, the primal objective value at $\hat \pi$ is defined via
+    
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \label{equation_de_p_dans_preuve}
+    \mathsf{P}_{\alpha,\beta}(\hat{\pi}) &=& \int_{\mathcal X \times \mathcal Y} (\mathsf{c}(x,y) \hat \rho(x,y) + \alpha (\hat \rho(x,y) \log (\hat \rho(x,y)) - \hat \rho(x,y) + 1)) \mathrm{d}P\otimes Q(x,y) \\ && + \beta \int_{\mathcal Y} (\hat s(y) \log(\hat s(y)) - \hat  s(y) + 1) \mathrm{d}Q(y).
+  \end{IEEEeqnarray}
+  
+  For all points $(x,y) \in \mathcal X \times \mathcal Y$, since $\hat \rho(x,y) = e^{\frac{\hat u (x) + \hat v(y)-\mathsf{c}(x,y)}{\alpha}}$, the pointwise Fenchel-Young equality \cite[Theorem~2.3.1]{convexanalysis} for the function $t\mapsto \alpha(t\log(t)-t+1)$ states
+  
+  \begin{IEEEeqnarray}{rCl}
+    \middlesqueezeequBrutal
+    \alpha (\hat \rho(x,y)\log (\hat \rho(x,y))- \hat \rho(x,y)+ 1) = \hat \rho(x,y)(\hat u(x) + \hat v(y) - \mathsf{c}(x,y)) - \alpha (\hat \rho(x,y) - 1). \ \ \ \ \ \
+  \end{IEEEeqnarray}
+  
+  Substitution into \eqref{equation_de_p_dans_preuve} leads to
+  
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \mathsf{P}_{\alpha,\beta}(\hat{\pi}) &=& \int_{\mathcal X \times \mathcal Y} \hat \rho(x,y)(\hat u(x) + \hat v(y)) \mathrm{d}P\otimes Q(x,y) - \int_{\mathcal X \times \mathcal Y} \alpha (\hat \rho(x,y) - 1) \mathrm{d}P\otimes Q(x,y) \\ && + \beta \int_{\mathcal Y} (\hat s(y) \log(\hat s(y)) - \hat  s(y) + 1) \mathrm{d}Q(y).
+  \end{IEEEeqnarray}
+  
+  As $\hat \rho$ is a probability density, the intergral term $\int_{\mathcal X \times \mathcal Y} (\hat \rho(x,y) - 1) \mathrm{d}P\otimes Q(x,y)$ vanishes. Equation \eqref{normalisation_2_ds_preuve} provides the relation $\log(\hat s) = -\hat v / \beta$. Pointwise Fenchel-Young equality \cite[Theorem~2.3.1]{convexanalysis} for the second entropic term in \eqref{equation_de_p_dans_preuve} implies
+  
+  \begin{IEEEeqnarray}{rCl}
+    \beta (\hat s(y)\log (\hat s(y))- \hat s(y)+ 1) = -\hat s(y)\hat v(y) - \beta (\hat s(y) - 1).
+  \end{IEEEeqnarray}
+  
+  Linearity of the integral and Fubini's theorem \cite[Theorem~8.8]{rudin1987real} yield
+  
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \mathsf{P}_{\alpha,\beta}(\hat{\pi}) &=& \int_{\mathcal X} \hat u(x) \left( \int_{\mathcal Y} \hat \rho(x,y) \mathrm{d}Q(y) \right) \mathrm{d}P(x) + \int_{\mathcal Y} \hat v(y) \left( \int_{\mathcal X} \hat \rho(x,y) \mathrm{d}P(x) \right) \mathrm{d}Q(y) \\
+    && -\int_{\mathcal Y} \hat v(y)\hat s(y) \mathrm{d}Q(y) - \beta \int_{\mathcal Y} (\hat s(y) - 1) \mathrm{d}Q(y).
+  \end{IEEEeqnarray}
+  
+  Definitions of the marginals $\hat \pi_{\#}^{\mathcal X}$ and $\hat \pi_{\#}^{\mathcal Y}$ coupled with identities \eqref{normalisation_1_ds_preuve} and \eqref{normalisation_2_ds_preuve} lead to
+ 
+  \begin{IEEEeqnarray}{rCl}
+    \mathsf{P}_{\alpha,\beta}(\hat{\pi}) &=& \middlesqueezeequAggressive \int_{\mathcal X} \hat u(x) \mathrm{d}P(x) + \int_{\mathcal Y} \hat v(y)\hat s(y) \mathrm{d}Q(y) - \int_{\mathcal Y} \hat v(y)\hat s(y) \mathrm{d}Q(y) - \beta(1 - 1) \\ &=& \int_{\mathcal X} \hat u(x) \mathrm{d}P(x) = \mathsf D_{\alpha,\beta}(\hat u,\hat v),
+  \end{IEEEeqnarray}
+  
+  where the last equality follows from \eqref{dual_simplif_preuve}. Therefore, from Lemma \ref{lemme_dualite_faible}, strong duality $\mathsf{P}_{\alpha,\beta}(\hat{\pi}) = \mathsf{D}_{\alpha,\beta}(\hat u, \hat v)$ holds and $\hat \pi$ is a minimizer for $\mathsf{P}_{\alpha,\beta}$. Uniqueness of the minimizer $\hat \pi$ follows from the strict convexity of the Kullback-Leibler divergence on its support.
+%\end{IEEEproof}
+
+\subsection{Proof of Existence and Uniqueness of the Gauge-Fixed Pair in Theorem~\ref{theoreme_dual_attainment}}
+
+%\begin{IEEEproof}
+The existence follows from Theorem~\ref{theoreme_dual_attainment}. 
+In particular, let $(\tilde u,\tilde v)$ be a pair of maximizing potentials for $\mathsf D_{\alpha,\beta}$ in \eqref{dual_maversion_fonctionnelle_C}. 
+Since $\mathsf D_{\alpha,\beta}$ is Gateaux differentiable and concave, the first-order optimality conditions in Lemma~\ref{lemme_differentiation} are satisfied. Define
+
+\begin{IEEEeqnarray}{rCl}
+  \label{definition_u_normalise}
+  u &\triangleq& \tilde u -\alpha\log(Z(\tilde u,\tilde v)) -\beta\log(R(\tilde v)), \\
+  \label{definition_v_normalise}
+  v &\triangleq& \tilde v+\beta\log(R(\tilde v)),
+\end{IEEEeqnarray}
+
+where
+
+\begin{IEEEeqnarray}{rCl}
+  \label{definition_Z_dans_preuve_unicite}
+  Z(f,g)
+  &\triangleq&
+   \int_{\mathcal X\times\mathcal Y} e^{\frac{f(x)+g(y)-\mathsf c(x,y)}{\alpha}} \mathrm dP\otimes Q(x,y); 
+   \mbox{ and }
+  R(g)
+  \triangleq
+  \int_{\mathcal Y} e^{-\frac{g(y)}{\beta}} \mathrm dQ(y).
+\end{IEEEeqnarray}
+
+From the translation invariance of $\mathsf D_{\alpha,\beta}$ in Lemma~\ref{lemme_propriete_de_ma_fonctionnelle_duale}, the pair $(u,v)$ defined in \eqref{definition_u_normalise} and \eqref{definition_v_normalise} is still a pair of maximizing potentials for $\mathsf D_{\alpha,\beta}$. 
+Moreover, \eqref{definition_u_normalise}, \eqref{definition_v_normalise}, and \eqref{definition_Z_dans_preuve_unicite}, imply
+
+\begin{IEEEeqnarray}{rCl}
+  \label{normalisation_Z_unicite}
+  Z(u,v) &=&1, \\
+  \label{normalisation_R_unicite}
+  R(v) &=& 1.
+\end{IEEEeqnarray}
+
+%Indeed,
+%\begin{IEEEeqnarray}{rCl}
+%  Z(u,v)
+%  &=&
+%  \int_{\mathcal X\times\mathcal Y}
+%  e^{
+%  \frac{
+%  \tilde u(x)-\alpha\log(Z(\tilde u,\tilde v))
+%  -\beta\log(R(\tilde v))
+%  +\tilde v(y)+\beta\log(R(\tilde v))
+%  -\mathsf c(x,y)}
+%  {\alpha}}
+%  \mathrm dP\otimes Q(x,y)
+%  \\
+%  &=&
+%  \frac{1}{Z(\tilde u,\tilde v)}
+%  \int_{\mathcal X\times\mathcal Y}
+%  e^{\frac{\tilde u(x)+\tilde v(y)-\mathsf c(x,y)}{\alpha}}
+%  \mathrm dP\otimes Q(x,y)
+%  =
+%  1,
+%\end{IEEEeqnarray}
+%which proves \eqref{normalisation_Z_unicite}. Similarly,
+%\begin{IEEEeqnarray}{rCl}
+%  R(v)
+%  &=&
+%  \int_{\mathcal Y}
+%  e^{-\frac{\tilde v(y)+\beta\log(R(\tilde v))}{\beta}}
+%  \mathrm dQ(y)
+%  \\
+%  &=&
+%  \frac{1}{R(\tilde v)}
+%  \int_{\mathcal Y}
+%  e^{-\frac{\tilde v(y)}{\beta}}
+%  \mathrm dQ(y)
+%  =
+%  1,
+%\end{IEEEeqnarray}
+%which proves \eqref{normalisation_R_unicite}.
+ From \eqref{normalisation_Z_unicite} and the first-order optimality condition in  \eqref{differentielle_de_C_par_rapport_a_u}, it follows that
+ 
+\begin{IEEEeqnarray}{rCl}
+  \label{normalisation_u_transform_unicite}
+  \int_{\mathcal Y} e^{\frac{u(x)+v(y)-\mathsf c(x,y)}{\alpha}} \mathrm dQ(y) &\eqas{P}& 1.
+\end{IEEEeqnarray}
+
+Equation \eqref{normalisation_u_transform_unicite} is equivalent to \eqref{transform_pour_u}. 
+Similarly, from \eqref{normalisation_Z_unicite}, and the first-order optimality condition in \eqref{differentielle_de_C_par_rapport_a_v}, it follows that
+
+\begin{IEEEeqnarray}{rCl}
+  \label{normalisation_v_transform_unicite}
+  \int_{\mathcal X} e^{\frac{u(x)+v(y)-\mathsf c(x,y)}{\alpha}} \mathrm dP(x)
+  &\eqas{Q}& e^{-\frac{v(y)}{\beta}}.
+\end{IEEEeqnarray}
+
+Equation \eqref{normalisation_v_transform_unicite}, together with \eqref{normalisation_Z_unicite}, is equivalent to \eqref{transform_pour_v}. 
+Hence, there exists at least one pair satisfying \eqref{transform_pour_u} and \eqref{transform_pour_v} simultaneously. This proves the existence.
+
+It remains to prove the uniqueness of such a pair. Let $(u_1,v_1)$ and $(u_2,v_2)$ satisfy \eqref{transform_pour_u} and \eqref{transform_pour_v} simultaneously, that is
+
+\begin{IEEEeqnarray}{rCl}
+\label{eq:pair1}
+u_1 &=& \Phi(v_1), \qquad v_1 = \Psi(u_1),\\
+\label{eq:pair2}
+u_2 &=& \Phi(v_2), \qquad v_2 = \Psi(u_2),
+\end{IEEEeqnarray}
+
+where $\Phi$ is in \eqref{formule_de_phi} and $\Psi$ is in \eqref{formule_de_psi}.
+Associate to each pair the coupling defined as follows
+
+\begin{IEEEeqnarray}{rCl}
+\label{eq:pi1_def}
+\pi_1(\mathrm dx,\mathrm dy)
+&\triangleq&
+\exp\!\left(\frac{u_1(x)+v_1(y)-\mathsf c(x,y)}{\alpha}\right)\,P(\mathrm dx)\,Q(\mathrm dy),\\
+\label{eq:pi2_def}
+\pi_2(\mathrm dx,\mathrm dy)
+&\triangleq&
+\exp\!\left(\frac{u_2(x)+v_2(y)-\mathsf c(x,y)}{\alpha}\right)\,P(\mathrm dx)\,Q(\mathrm dy).
+\end{IEEEeqnarray}
+
+From Theorem \ref{theoreme_attainment_primal}, \eqref{eq:pair1} and \eqref{eq:pair2}, $\pi_1$ and $\pi_2$ are primal minimizers. Uniqueness of the primal minimizer (Theorem \ref{theoreme_attainment_primal}) yields
+
+\begin{IEEEeqnarray}{rCl}
+\label{eq:pi_equal_unique}
+\pi_1 &=& \pi_2,
+\end{IEEEeqnarray}
+
+which, together with \eqref{eq:pi1_def} and \eqref{eq:pi2_def}, implies
+
+\begin{IEEEeqnarray}{rCl}
+\label{eq:exp_equal_unique}
+\exp\!\left(\frac{u_1(x)+v_1(y)-\mathsf c(x,y)}{\alpha}\right)
+&\eqas{P\otimes Q}&
+\exp\!\left(\frac{u_2(x)+v_2(y)-\mathsf c(x,y)}{\alpha}\right).
+\end{IEEEeqnarray}
+
+Taking logarithms in the previous equality gives
+
+\begin{IEEEeqnarray}{rCl}
+\label{eq:sum_equal_unique}
+u_1(x)+v_1(y) &\eqas{P\otimes Q}& u_2(x)+v_2(y).
+\end{IEEEeqnarray}
+
+  From Fubini's theorem \cite[Theorem~8.8]{rudin1987real}, there exists a set
+  $\mathcal Y_0\subset \mathcal Y$ such that $Q(\mathcal Y_0)=1$ and, for
+  every $y\in\mathcal Y_0$, the equality in \eqref{eq:sum_equal_unique} holds for all $x\in\mathcal X$ almost surely with respect to $P$. Fix $y_0\in\mathcal Y_0$. Then, 
+
+    \begin{IEEEeqnarray}{rCl}
+    \label{eq:u_diff_constant}
+    u_1(x)-u_2(x)
+    &=&
+    v_2(y_0)-v_1(y_0)
+    \eqas{P}
+    K,
+  \end{IEEEeqnarray}
+
+  with
+
+  \begin{IEEEeqnarray}{rCl}
+    K
+    &\triangleq&
+    v_2(y_0)-v_1(y_0).
+  \end{IEEEeqnarray}
+
+  Combining \eqref{eq:u_diff_constant} with
+  \eqref{eq:sum_equal_unique} yields, 
+
+  \begin{IEEEeqnarray}{rCl}
+    \label{eq:v_diff_constant}
+    v_2(y)-v_1(y)
+    &\eqas{Q}&
+    K.
+  \end{IEEEeqnarray}
+
+  Finally, combining \eqref{eq:v_diff_constant} with the normalization in
+  \eqref{normalisation_pour_psi_app}, which follows from
+  \eqref{eq:pair1} and \eqref{eq:pair2}, yields
+
+  \begin{IEEEeqnarray}{rCl}
+    \label{eq:K_zero}
+    1
+    &=&
+    \int_{\mathcal Y}
+    \exp\left(-\frac{v_2(y)}{\beta}\right)
+    \mathrm dQ(y)
+    \\
+    &=&
+    \int_{\mathcal Y}
+    \exp\left(-\frac{v_1(y)+K}{\beta}\right)
+    \mathrm dQ(y)
+    \\
+    &=&
+    e^{-\frac{K}{\beta}}
+    \int_{\mathcal Y}
+    \exp\left(-\frac{v_1(y)}{\beta}\right)
+    \mathrm dQ(y)
+    =
+    e^{-\frac{K}{\beta}}.
+  \end{IEEEeqnarray}
+
+  Hence $K=0$. Therefore, \eqref{eq:u_diff_constant} and
+  \eqref{eq:v_diff_constant} imply
+
+  \begin{IEEEeqnarray}{rCl}
+    \label{eq:unique_pair_conclusion}
+    u_1
+    &\eqas{P}&
+    u_2,
+    \qquad
+    v_1
+    \eqas{Q}
+    v_2.
+  \end{IEEEeqnarray}
+
+  This proves uniqueness of the pair satisfying \eqref{transform_pour_u}
+  and \eqref{transform_pour_v}. The proof is complete.
+%\end{IEEEproof}
+
+
+\section{Approximation Error}
+\label{app:approx_error}
+
+\subsection{Conditions for $SROT_Q = SROT$}
+
+\begin{lemma}
+  \label{lemme_srotq_equals_srot}
+  Assume that $Q$ has full support on $\mathcal{Y}$, and that for $P$-almost every
+  $x \in \mathcal{X}$, the map $y \mapsto \mathsf{c}(x,y)$ is continuous. Then
+  \begin{align}
+    \label{srotqegalsrot}
+    SROT_Q = SROT.
+  \end{align}
+  In particular, if $\mathcal{Y} = \{y_1, \dots, y_m\}$ is finite and
+  $Q(\{y_j\}) > 0$ for every $j \in \{1,\dots,m\}$, then \eqref{srotqegalsrot} holds.
+\end{lemma}
+
+\begin{IEEEproof}
+  For all $x\in\mathcal X$, define
+  
+  \begin{IEEEeqnarray}{rCl}
+    m(x) &\triangleq& \inf_{y\in\mathcal Y}\mathsf c(x,y),
+    \\[0.15cm]
+    m_Q(x) &\triangleq& \operatorname*{ess\,inf}_{y\sim Q}\mathsf c(x,y).
+  \end{IEEEeqnarray}
+  
+  The essential infimum is taken over a smaller class than the pointwise infimum, thus for all $x\in\mathcal X$, it holds that
+  
+  \begin{IEEEeqnarray}{rCl}
+    m_Q(x)\geq m(x).
+  \end{IEEEeqnarray}
+  
+  Consequently,
+  
+  \begin{IEEEeqnarray}{rCl}
+    SROT_Q \geq SROT.
+  \end{IEEEeqnarray}
+
+ It remains to prove the reverse inequality. Fix $x\in\mathcal X$ be such
+  that the map $y\mapsto \mathsf c(x,y)$ is continuous. Given $\varepsilon>0$, from the definition of $m(x)$, there exists $y_\varepsilon\in\mathcal Y$ such that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \mathsf c(x,y_\varepsilon)<m(x)+\varepsilon.
+  \end{IEEEeqnarray}
+  
+  The continuity of $y\mapsto \mathsf c(x,y)$ at $y_\varepsilon$ yields the existence of an open neighborhood $U_\varepsilon$ of $y_\varepsilon$ such that for all $y\in U_\varepsilon$, it follows that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{open_neighbourhood_bound}
+    \mathsf c(x,y)<m(x)+\varepsilon.
+  \end{IEEEeqnarray}
+  
+  Since $Q$ has full support and $U_\varepsilon$ is nonempty and open, it follows that 
+  
+  \begin{IEEEeqnarray}{rCl}
+  \label{positive_mass_open_set}
+    Q(U_\varepsilon)>0.
+  \end{IEEEeqnarray}
+  
+From the definition of the essential
+  infimum,
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{ineq_mQ_leq_m_eps}
+    m_Q(x)
+    \leq
+    m(x)+\varepsilon.
+  \end{IEEEeqnarray}
+  
+   Since $\varepsilon>0$ is arbitrary, \eqref{ineq_mQ_leq_m_eps} yields
+   
+  \begin{IEEEeqnarray}{rCl}
+    \label{eq_mQ_eq_m_ae}
+    m_Q(x)=m(x)
+  \end{IEEEeqnarray}
+  
+  for all $x$ such that $y\mapsto \mathsf c(x,y)$ is continuous.
+  Therefore, \eqref{eq_mQ_eq_m_ae} holds for  $x\in\mathcal X$ almost surely with respect to $P$. Integrating with respect to $P$ gives
+  
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal X} m_Q(x)\,\mathrm dP(x)
+    =
+    \int_{\mathcal X} m(x)\,\mathrm dP(x).
+  \end{IEEEeqnarray}
+  
+  Since
+  
+  \begin{IEEEeqnarray}{rCl}
+    SROT_Q=\int_{\mathcal X} m_Q(x)\,\mathrm dP(x);
+    \mbox{ and }
+    SROT=\int_{\mathcal X} m(x)\,\mathrm dP(x),
+  \end{IEEEeqnarray}
+  
+  it follows that
+  
+  \begin{IEEEeqnarray}{rCl}
+    SROT_Q=SROT.
+  \end{IEEEeqnarray}
+  
+Consider now the finite case. If $\mathcal Y=\{y_1,\dots,y_m\}$, then every map $y\mapsto \mathsf c(x,y)$ is continuous. Moreover, the condition $Q(\{y_j\})>0$ for all $j\in\{1,\dots,m\}$ is equivalent to $Q$ having full support on $\mathcal Y$. Hence the first part of the proof applies and yields
+
+  \begin{IEEEeqnarray}{rCl}
+    SROT_Q=SROT.
+  \end{IEEEeqnarray}
+
+  This completes the proof.
+\end{IEEEproof}
+
+
+
+\subsection{Proof of Theorem \ref{theoreme_value_convergence_all_limits}}
+
+  The proof is divided into two parts, corresponding to the two assertions
+  of the theorem.
+
+  \paragraph{Proof of item 1:}
+  Since $\alpha>0$, every admissible coupling with finite value in
+  \eqref{primal_avec_2_KL} is absolutely continuous with respect to $P\otimes Q$.
+  Therefore, for all such coupling $\pi\in\Pi(P,\star)$, it holds that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)\mathrm d\pi(x,y)
+    \geq
+    SROT_Q.
+  \end{IEEEeqnarray}
+  
+  Since $P$ and $Q$ are probability measure then the Kullback--Leibler terms are non-negative, it then follows that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{lower_bound_srot_alpha_beta_srotq}
+    SROT_{\alpha,\beta}
+    \geq
+    SROT_Q.
+  \end{IEEEeqnarray}
+
+  It remains to prove the reverse inequality in the limit. For $\tau>0$,
+  define
+  
+  \begin{IEEEeqnarray}{rCl}
+    Z_\tau(x)
+    &\triangleq&
+    \int_{\mathcal Y}
+    e^{-\frac{\mathsf c(x,z)}{\tau}}\mathrm dQ(z),
+    \\
+    K_x^\tau(\mathrm dy)
+    &\triangleq&
+    \frac{e^{-\frac{\mathsf c(x,y)}{\tau}}}{Z_\tau(x)}
+    Q(\mathrm dy),
+    \\
+    \pi^\tau(\mathrm dx,\mathrm dy)
+    &\triangleq&
+    P(\mathrm dx)K_x^\tau(\mathrm dy).
+  \end{IEEEeqnarray}
+  
+  Since $\mathsf c$ is bounded and Borel measurable, the map
+  $x\mapsto Z_\tau(x)$ is measurable and strictly positive, and
+  $x\mapsto K_x^\tau$ defines a probability kernel from $\mathcal X$ to
+  $\mathcal Y$. Hence, the meaure $\pi^\tau$ belongs to $\Pi(P,\star)$ and satisfies
+  $\pi^\tau\ll P\otimes Q$. Moreover,
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{density_pi_tau}
+    \frac{\mathrm d\pi^\tau}{\mathrm dP\otimes Q}(x,y)
+    =
+    \frac{e^{-\frac{\mathsf c(x,y)}{\tau}}}{Z_\tau(x)}.
+  \end{IEEEeqnarray}
+  Therefore,
+  \begin{IEEEeqnarray}{rCl}
+    \label{log_density_pi_tau}
+    \log\left(
+    \frac{\mathrm d\pi^\tau}{\mathrm dP\otimes Q}(x,y)
+    \right)
+    =
+    -\frac{\mathsf c(x,y)}{\tau}
+    -
+    \log Z_\tau(x).
+  \end{IEEEeqnarray}
+  
+  Since $|\mathsf c(x,y)|\leq \|\mathsf c\|_\infty$ for all $(x,y) \in \mathcal{X}\times\mathcal{Y}$, it holds that
+  
+  \begin{IEEEeqnarray}{rCl}
+    e^{-\frac{\|\mathsf c\|_\infty}{\tau}}
+    \leq
+    Z_\tau(x)
+    \leq
+    e^{\frac{\|\mathsf c\|_\infty}{\tau}}.
+  \end{IEEEeqnarray}
+  
+  Thus, from \eqref{log_density_pi_tau},
+  
+  \begin{IEEEeqnarray}{rCl}
+    \left|
+    \log\left(
+    \frac{\mathrm d\pi^\tau}{\mathrm dP\otimes Q}(x,y)
+    \right)
+    \right|
+    \leq
+    \frac{2\|\mathsf c\|_\infty}{\tau}.
+  \end{IEEEeqnarray}
+  
+  Consequently,
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{KL_pi_tau_bound}
+    D_{KL}(\pi^\tau\|P\otimes Q)
+    \leq
+    \frac{2\|\mathsf c\|_\infty}{\tau}.
+  \end{IEEEeqnarray}
+  
+  The data processing inequality yields
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{KL_marginal_pi_tau_bound}
+    D_{KL}\left((\pi^\tau)_{\#}^{\mathcal Y}\|Q\right)
+    \leq
+    D_{KL}(\pi^\tau\|P\otimes Q)
+    \leq
+    \frac{2\|\mathsf c\|_\infty}{\tau}.
+  \end{IEEEeqnarray}
+
+  Define
+  
+  \begin{IEEEeqnarray}{rCl}
+    m_Q(x)
+    &\triangleq&
+    \operatorname*{ess\,inf}_{y\sim Q}\mathsf c(x,y).
+  \end{IEEEeqnarray}
+  
+  Then
+  
+  \begin{IEEEeqnarray}{rCl}
+    SROT_Q
+    =
+    \int_{\mathcal X}m_Q(x)\mathrm dP(x).
+  \end{IEEEeqnarray}
+  
+  Fix $\delta>0$. For all $x\in\mathcal X$, define
+  
+  \begin{IEEEeqnarray}{rCl}
+    A_{x,\delta}
+    &\triangleq&
+    \left\{
+    y\in\mathcal Y:
+    \mathsf c(x,y)\leq m_Q(x)+\delta
+    \right\}.
+  \end{IEEEeqnarray}
+  
+  From the definition of the essential infimum,
+  $Q(A_{x,\delta})>0$ for $P$-almost every $x$. Moreover,
+  $\mathsf c(x,y)\geq m_Q(x)$ for $Q$-almost every $y$. Hence, for
+  $P$-almost every $x$,
+  
+  \begin{IEEEeqnarray}{rCl}
+    e^{-\frac{m_Q(x)}{\tau}}
+    \geq
+    Z_\tau(x)
+    \geq
+    e^{-\frac{m_Q(x)+\delta}{\tau}}Q(A_{x,\delta}).
+  \end{IEEEeqnarray}
+  
+  Taking logarithms and multiplying by $-\tau$ gives
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{bounds_minus_tau_log_Z}
+    m_Q(x)
+    \leq
+    -\tau\log Z_\tau(x)
+    \leq
+    m_Q(x)+\delta-\tau\log Q(A_{x,\delta}).
+  \end{IEEEeqnarray}
+  Letting $\tau\downarrow 0$ in \eqref{bounds_minus_tau_log_Z}, and then
+  using the arbitrariness of $\delta>0$, yields
+  \begin{IEEEeqnarray}{rCl}
+    \label{limit_minus_tau_log_Z}
+    -\tau\log Z_\tau(x)
+    \xrightarrow[\tau\downarrow 0]{}
+    m_Q(x)
+  \end{IEEEeqnarray}
+  for $P$-almost every $x$.
+
+  Moreover, from \eqref{density_pi_tau}, it holds that
+  
+  \begin{IEEEeqnarray}{rCl}
+    D_{KL}(K_x^\tau\|Q)
+    =
+    -\frac{1}{\tau}
+    \int_{\mathcal Y}\mathsf c(x,y)\mathrm dK_x^\tau(y)
+    -
+    \log Z_\tau(x).
+  \end{IEEEeqnarray}
+  
+  Therefore,
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{cost_kernel_upper_bound}
+    \int_{\mathcal Y}\mathsf c(x,y)\mathrm dK_x^\tau(y)
+    =
+    -\tau\log Z_\tau(x)
+    -
+    \tau D_{KL}(K_x^\tau\|Q)
+    \leq
+    -\tau\log Z_\tau(x).
+  \end{IEEEeqnarray}
+  
+  On the other hand, since $\mathsf c(x,y)\geq m_Q(x)$ for $Q$-almost every
+  $y$, it holds that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{cost_kernel_lower_bound}
+    \int_{\mathcal Y}\mathsf c(x,y)\mathrm dK_x^\tau(y)
+    \geq
+    m_Q(x).
+  \end{IEEEeqnarray}
+  
+  Combining \eqref{limit_minus_tau_log_Z},
+  \eqref{cost_kernel_upper_bound}, and
+  \eqref{cost_kernel_lower_bound}, yields
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{cost_kernel_convergence}
+    \int_{\mathcal Y}\mathsf c(x,y)\mathrm dK_x^\tau(y)
+    \xrightarrow[\tau\downarrow 0]{}
+    m_Q(x)
+  \end{IEEEeqnarray}
+  
+  for $P$-almost every $x$. Since
+  
+  \begin{IEEEeqnarray}{rCl}
+    \left|
+    \int_{\mathcal Y}
+    \mathsf c(x,y)\mathrm dK_x^\tau(y)
+    \right|
+    \leq
+    \|\mathsf c\|_\infty,
+  \end{IEEEeqnarray}
+  
+  the dominated convergence theorem yields
+  \begin{IEEEeqnarray}{rCl}
+    \label{pi_tau_cost_convergence}
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)\mathrm d\pi^\tau(x,y)
+    =
+    \int_{\mathcal X}
+    \left(
+    \int_{\mathcal Y}
+    \mathsf c(x,y)\mathrm dK_x^\tau(y)
+    \right)
+    \mathrm dP(x)
+    \xrightarrow[\tau\downarrow 0]{}
+    SROT_Q.
+  \end{IEEEeqnarray}
+
+The optimality of the minimizer $\hat \pi_{\alpha,\beta}$ in \eqref{primal_avec_2_KL} yields
+
+  \begin{IEEEeqnarray}{rCl}
+    SROT_{\alpha,\beta}
+    &\leq&
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)\mathrm d\pi^\tau(x,y)
+    +
+    \alpha D_{KL}(\pi^\tau\|P\otimes Q)
+    +
+    \beta
+    D_{KL}\left((\pi^\tau)_{\#}^{\mathcal Y}\|Q\right).
+  \end{IEEEeqnarray}
+  
+  Using \eqref{KL_pi_tau_bound} and
+  \eqref{KL_marginal_pi_tau_bound}, it follows that
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{upper_bound_srot_alpha_beta_tau}
+    SROT_{\alpha,\beta}
+    \leq
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)\mathrm d\pi^\tau(x,y)
+    +
+    \frac{2\|\mathsf c\|_\infty(\alpha+\beta)}{\tau}.
+  \end{IEEEeqnarray}
+  
+  Choosing $\tau=\sqrt{\alpha+\beta}$ in
+  \eqref{upper_bound_srot_alpha_beta_tau} and letting
+  $(\alpha,\beta)\to(0,0)$, \eqref{pi_tau_cost_convergence} gives
+  
+  \begin{IEEEeqnarray}{rCl}
+    \limsup_{\alpha,\beta\to 0}SROT_{\alpha,\beta}
+    \leq
+    SROT_Q,
+  \end{IEEEeqnarray}
+  
+  which together with \eqref{lower_bound_srot_alpha_beta_srotq}, proves
+  \eqref{convergence_sans_bornes_en_valeur}. If $SROT_Q=SROT$, for instance
+  under the assumptions of Lemma~\ref{lemme_srotq_equals_srot}, then
+  \eqref{convergence_sans_bornes_en_valeur} gives
+  $SROT_{\alpha,\beta}\to SROT$. This completes the proof of $1$.
+
+  \paragraph{Proof of item 2:} Assume first that
+  \eqref{condition_pour_bornes_par_KL_sur_alpha_et_beta} holds. The data
+  processing inequality yields
+  
+  \begin{IEEEeqnarray}{rCl}
+    D_{KL}(\tilde\pi_{\#}^{\mathcal Y}\|Q)
+    \leq
+    D_{KL}(\tilde\pi\|P\otimes Q)
+    <+\infty.
+  \end{IEEEeqnarray}
+  
+    The Kullback--Leibler terms in \eqref{primal_avec_2_KL} are non-negative, it then follows that
+  
+  \begin{IEEEeqnarray}{rCl}
+    SROT_{\alpha,\beta}
+    \geq
+    SROT.
+  \end{IEEEeqnarray}
+  
+  Evaluating the objective defining $SROT_{\alpha,\beta}$ at $\tilde\pi$
+  gives
+  
+  \begin{IEEEeqnarray}{rCl}
+    SROT_{\alpha,\beta}
+    &\leq&
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)\mathrm d\tilde\pi(x,y)
+    +
+    \alpha D_{KL}(\tilde\pi\|P\otimes Q)
+    +
+    \beta D_{KL}(\tilde\pi_{\#}^{\mathcal Y}\|Q)
+    \\
+    &=&
+    SROT
+    +
+    \alpha D_{KL}(\tilde\pi\|P\otimes Q)
+    +
+    \beta D_{KL}(\tilde\pi_{\#}^{\mathcal Y}\|Q).
+  \end{IEEEeqnarray}
+  
+  This proves \eqref{bornes_par_KL_sur_alpha_et_beta}, and concludes the proof.
+
+\subsection{Partial Limits in Value}
+
+\begin{proposition}
+  \label{proposition_partial_limits}
+  The following assertions hold.
+  \begin{enumerate}
+    \item Fix $\beta > 0$. Assume that the problem defining $SROT_{0,\beta}$ admits a
+    minimizer $\tilde\pi_\beta \in \Pi(P,\star)$ satisfying
+    \begin{align}
+      \label{condition_pour_bornes_par_KL_sur_alpha}
+      D_{KL}(\tilde\pi_\beta \| P\otimes Q) < +\infty.
+    \end{align}
+    Then
+    \begin{align}
+      \label{bornes_par_KL_sur_alpha}
+      0
+      \leq
+      SROT_{\alpha,\beta} - SROT_{0,\beta}
+      \leq
+      \alpha \, D_{KL}(\tilde\pi_\beta \| P\otimes Q).
+    \end{align}
+
+    \item Fix $\alpha > 0$. Assume that the problem defining $SROT_{\alpha,0}$ admits a
+    minimizer $\tilde\pi_\alpha \in \Pi(P,\star)$. Then
+    $D_{KL}((\tilde\pi_\alpha)_{\#}^{\mathcal{Y}} \| Q) < +\infty$ and
+    \begin{align}
+      \label{bornes_par_KL_sur_beta}
+      0
+      \leq
+      SROT_{\alpha,\beta} - SROT_{\alpha,0}
+      \leq
+      \beta \, D_{KL}\!\left((\tilde\pi_\alpha)_{\#}^{\mathcal{Y}} \| Q\right).
+    \end{align}
+  \end{enumerate}
+\end{proposition}
+
+\begin{proof}
+  Consider first the bound \eqref{bornes_par_KL_sur_alpha}.
+  Fix $\beta>0$ and assume that the problem defining $SROT_{0,\beta}$
+  admits a minimizer $\tilde\pi_\beta\in\Pi(P,\star)$ satisfying
+  \eqref{condition_pour_bornes_par_KL_sur_alpha}. Since the additional term
+  $\alpha D_{KL}(\pi\|P\otimes Q)$ is non-negative, it holds that
+
+  \begin{IEEEeqnarray}{rCl}
+    SROT_{\alpha,\beta}
+    \geq
+    SROT_{0,\beta}.
+  \end{IEEEeqnarray}
+
+  Evaluating the objective defining $SROT_{\alpha,\beta}$ at
+  $\tilde\pi_\beta$ yields
+
+  \begin{IEEEeqnarray}{rCl}
+    SROT_{\alpha,\beta}
+    &\leq&
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)\mathrm d\tilde\pi_\beta(x,y)
+    +
+    \alpha D_{KL}(\tilde\pi_\beta\|P\otimes Q)
+    +
+    \beta D_{KL}\left((\tilde\pi_\beta)_{\#}^{\mathcal Y}\|Q\right)
+    \\
+    &=&
+    SROT_{0,\beta}
+    +
+    \alpha D_{KL}(\tilde\pi_\beta\|P\otimes Q),
+  \end{IEEEeqnarray}
+
+  where the last equality follows from the optimality of
+  $\tilde\pi_\beta$ for the problem defining $SROT_{0,\beta}$. This proves
+  \eqref{bornes_par_KL_sur_alpha}.
+
+  Consider now the bound \eqref{bornes_par_KL_sur_beta}.
+  Fix $\alpha>0$ and assume that the problem defining
+  $SROT_{\alpha,0}$ admits a minimizer
+  $\tilde\pi_\alpha\in\Pi(P,\star)$. Since $P\otimes Q\in\Pi(P,\star)$ and
+  $\mathsf c$ is bounded,
+
+  \begin{IEEEeqnarray}{rCl}
+    SROT_{\alpha,0}
+    \leq
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)\mathrm d(P\otimes Q)(x,y)
+    <+\infty.
+  \end{IEEEeqnarray}
+
+  From the optimality of $\tilde\pi_\alpha$, it follows that
+
+  \begin{IEEEeqnarray}{rCl}
+    D_{KL}(\tilde\pi_\alpha\|P\otimes Q)
+    <+\infty.
+  \end{IEEEeqnarray}
+
+  The data processing inequality then yields
+
+  \begin{IEEEeqnarray}{rCl}
+    D_{KL}\left((\tilde\pi_\alpha)_{\#}^{\mathcal Y}\|Q\right)
+    \leq
+    D_{KL}(\tilde\pi_\alpha\|P\otimes Q)
+    <+\infty.
+  \end{IEEEeqnarray}
+
+  Since the additional term
+  $\beta D_{KL}(\pi_{\#}^{\mathcal Y}\|Q)$ is non-negative, one has
+
+  \begin{IEEEeqnarray}{rCl}
+    SROT_{\alpha,\beta}
+    \geq
+    SROT_{\alpha,0}.
+  \end{IEEEeqnarray}
+
+  Evaluating the objective defining $SROT_{\alpha,\beta}$ at
+  $\tilde\pi_\alpha$ gives
+
+  \begin{IEEEeqnarray}{rCl}
+    SROT_{\alpha,\beta}
+    &\leq&
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)\mathrm d\tilde\pi_\alpha(x,y)
+    +
+    \alpha D_{KL}(\tilde\pi_\alpha\|P\otimes Q)
+    +
+    \beta
+    D_{KL}\left((\tilde\pi_\alpha)_{\#}^{\mathcal Y}\|Q\right)
+    \\
+    &=&
+    SROT_{\alpha,0}
+    +
+    \beta
+    D_{KL}\left((\tilde\pi_\alpha)_{\#}^{\mathcal Y}\|Q\right).
+  \end{IEEEeqnarray}
+
+  This proves \eqref{bornes_par_KL_sur_beta}, and concludes the proof.
+\end{proof}
+
+\subsection{Proof of Theorem~\ref{theoreme_weak_convergence_general}}
+
+\begin{theorem}
+  \label{theoreme_weak_convergence_general}
+  Let $(\alpha_n, \beta_n)_{n\geq 1}$ be a sequence in $(0,+\infty)^2$ with
+  \begin{align}
+    (\alpha_n, \beta_n) \xrightarrow[n\to\infty]{} (0,0).
+  \end{align}
+  Assume that
+  \begin{align}
+    SROT_{\alpha_n,\beta_n} \xrightarrow[n\to\infty]{} SROT,
+  \end{align}
+  and that the family $(\hat\pi_{\alpha_n,\beta_n})_{n\geq 1}$ is tight. Then every
+  weak limit point of $(\hat\pi_{\alpha_n,\beta_n})_{n\geq 1}$ is a minimizer of the
+  unregularized semi-relaxed problem \eqref{primal_non_regularise}. If this minimizer is
+  unique and denoted $\pi^\star$, then $\hat\pi_{\alpha_n,\beta_n} \rightharpoonup
+  \pi^\star$.
+\end{theorem}
+
+\begin{IEEEproof}
+  Let $(\hat \pi_{\alpha_{n_k},\beta_{n_k}})_{k\geq 1}$ be a weakly
+  convergent subsequence of
+  $(\hat \pi_{\alpha_n,\beta_n})_{n\geq 1}$, and let
+  \begin{IEEEeqnarray}{rCl}
+    \hat \pi_{\alpha_{n_k},\beta_{n_k}}
+    \rightharpoonup
+    \bar \pi.
+  \end{IEEEeqnarray}
+  Since the projection map
+  \begin{IEEEeqnarray}{rCl}
+    (x,y)\in\mathcal X\times\mathcal Y
+    \longmapsto
+    x\in\mathcal X
+  \end{IEEEeqnarray}
+  is continuous, the first marginal of $\bar \pi$ is preserved under weak convergence.
+  Given that
+  $(\hat \pi_{\alpha_{n_k},\beta_{n_k}})_{\#}^{\mathcal X}=P$ for all $k$,
+  it follows that
+  \begin{IEEEeqnarray}{rCl}
+    \bar \pi_{\#}^{\mathcal X}=P.
+  \end{IEEEeqnarray}
+  Consequently,
+  \begin{IEEEeqnarray}{rCl}
+    \bar \pi\in\Pi(P,\star).
+  \end{IEEEeqnarray}
+
+  Given that $\mathsf c$ is bounded and lower semi-continuous, the function
+  $\mathsf c+\|\mathsf c\|_\infty$ is nonnegative and lower semi-continuous.
+  The Portmanteau theorem \cite[Theorem~2.1]{billingsley1999convergence} therefore yields
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal X\times\mathcal Y}
+    \left(\mathsf c(x,y)+\|\mathsf c\|_\infty\right)
+    \mathrm d\bar \pi(x,y)
+    &\leq&
+    \liminf_{k\to\infty}
+    \int_{\mathcal X\times\mathcal Y}
+    \left(\mathsf c(x,y)+\|\mathsf c\|_\infty\right)
+    \mathrm d\hat \pi_{\alpha_{n_k},\beta_{n_k}}(x,y).
+  \end{IEEEeqnarray}
+  Since both $\bar\pi$ and
+  $\hat \pi_{\alpha_{n_k},\beta_{n_k}}$ are probability measures, this is
+  equivalent to
+  \begin{IEEEeqnarray}{rCl}
+    \label{lsc_cost_weak_limit}
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)\mathrm d\bar \pi(x,y)
+    &\leq&
+    \liminf_{k\to\infty}
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)
+    \mathrm d\hat \pi_{\alpha_{n_k},\beta_{n_k}}(x,y).
+  \end{IEEEeqnarray}
+
+  The Kullback--Leibler terms in \eqref{primal_avec_2_KL} are
+  nonnegative, hence, for every $k$,
+  
+  \begin{IEEEeqnarray}{rCl}
+    \label{cost_bound_by_regularized_value}
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)
+    \mathrm d\hat \pi_{\alpha_{n_k},\beta_{n_k}}(x,y)
+    &\leq&
+    SROT_{\alpha_{n_k},\beta_{n_k}}.
+  \end{IEEEeqnarray}
+  
+  Combining \eqref{lsc_cost_weak_limit} and
+  \eqref{cost_bound_by_regularized_value}, and using the assumption
+  
+  \begin{IEEEeqnarray}{rCl}
+    SROT_{\alpha_n,\beta_n}
+    \xrightarrow[n\to\infty]{}
+    SROT,
+  \end{IEEEeqnarray}
+  
+  gives
+  
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)\mathrm d\bar \pi(x,y)
+    &\leq&
+    SROT.
+  \end{IEEEeqnarray}
+  
+  On the other hand, since $\bar \pi\in\Pi(P,\star)$, the definition of the
+  unregularized semi-relaxed problem in \eqref{primal_non_regularise} gives
+  
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)\mathrm d\bar \pi(x,y)
+    &\geq&
+    SROT.
+  \end{IEEEeqnarray}
+  
+  Therefore,
+  
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)\mathrm d\bar \pi(x,y)
+    =
+    SROT,
+  \end{IEEEeqnarray}
+  
+  which means that $\bar \pi$ is a minimizer of the unregularized semi-relaxed problem in 
+  \eqref{primal_non_regularise}. This proves that every weak limit point of
+  $(\hat \pi_{\alpha_n,\beta_n})_{n\geq 1}$ is a minimizer of
+  \eqref{primal_non_regularise}.
+
+  Assume now that this minimizer is unique, and denote it by $\pi^\star$.
+  By tightness and Prokhorov's theorem, the sequence
+  $(\hat \pi_{\alpha_n,\beta_n})_{n\geq 1}$ is relatively compact for the
+  weak topology. Hence every subsequence admits a weakly convergent
+  subsequence. From the first part of the proof, every weak limit point is a
+  minimizer of \eqref{primal_non_regularise}; by uniqueness, every weak
+  limit point is equal to $\pi^\star$. Consequently, the whole sequence
+  converges weakly to $\pi^\star$, that is,
+  
+  \begin{IEEEeqnarray}{rCl}
+    \hat \pi_{\alpha_n,\beta_n}
+    \rightharpoonup
+    \pi^\star.
+  \end{IEEEeqnarray}
+  
+  This completes the proof.
+\end{IEEEproof}
+
+\subsection{Proof of Theorem~\ref{theoreme_l1_control_discrete}}
+
+For all $i\in\{1,\dots,n\}$, recall that, the set $\Gamma_i$ is defined
+by
+\begin{IEEEeqnarray}{rCl}
+\label{EqMay2at21h48in2026LaCadiere}
+  \Gamma_i
+  &\triangleq&
+  \bigl\{
+  j\in\{1,\dots,m\}:
+  \mathsf c(x_i,y_j)=m_i
+  \bigr\},
+\end{IEEEeqnarray}
+where
+\begin{IEEEeqnarray}{rCl}
+  m_i
+  &\triangleq&
+  \min_{1\leq j\leq m}\mathsf c(x_i,y_j).
+\end{IEEEeqnarray}  Since the first marginal of every $\pi\in\Pi(P,\star)$ is equal to $P$,
+  it holds that
+  \begin{IEEEeqnarray}{rCl}
+    \sum_{j=1}^m \pi(x_i,y_j)=p_i,
+    \qquad i\in\{1,\dots,n\}.
+  \end{IEEEeqnarray}
+  Therefore, for all $\pi\in\Pi(P,\star)$,
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal X\times\mathcal Y}\mathsf c(x,y)\mathrm d\pi(x,y)
+    &=&
+    \sum_{i=1}^n\sum_{j=1}^m
+    \mathsf c(x_i,y_j)\pi(x_i,y_j)
+    \\
+    &=&
+    \sum_{i=1}^n p_i m_i
+    +
+    \sum_{i=1}^n\sum_{j=1}^m
+    \left(\mathsf c(x_i,y_j)-m_i\right)\pi(x_i,y_j).
+  \end{IEEEeqnarray}
+  Since $\mathsf c(x_i,y_j)-m_i\geq 0$ for all $i,j$, it follows that
+  \begin{IEEEeqnarray}{rCl}
+    SROT
+    =
+    \sum_{i=1}^n p_i m_i.
+  \end{IEEEeqnarray}
+
+  Moreover, equality is attained if and only if
+  \begin{IEEEeqnarray}{rCl}
+    \pi(x_i,y_j)=0
+    \qquad
+    \text{for all } i\in\{1,\dots,n\}
+    \text{ and } j\notin\Gamma_i.
+  \end{IEEEeqnarray}
+  Hence $\mathcal O$ is exactly the set of minimizers of
+  \eqref{primal_non_regularise}.
+
+  Furthermore, for all $\pi\in\Pi(P,\star)$,
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal X\times\mathcal Y}\mathsf c(x,y)\mathrm d\pi(x,y)-SROT
+    =
+    \sum_{i=1}^n\sum_{j=1}^m
+    \left(\mathsf c(x_i,y_j)-m_i\right)\pi(x_i,y_j).
+  \end{IEEEeqnarray}
+  For $j\in\Gamma_i$, the coefficient
+  $\mathsf c(x_i,y_j)-m_i$ vanishes. For $j\notin\Gamma_i$, the definition of
+  $\Delta$ in \eqref{definition_delta} gives
+  \begin{IEEEeqnarray}{rCl}
+    \mathsf c(x_i,y_j)-m_i\geq \Delta.
+  \end{IEEEeqnarray}
+  Consequently,
+  \begin{IEEEeqnarray}{rCl}
+    \label{eq:discrete_mass_outside_optimal_face_appendix}
+    \int_{\mathcal X\times\mathcal Y}\mathsf c(x,y)\mathrm d\pi(x,y)-SROT
+    \geq
+    \Delta
+    \sum_{i=1}^n\sum_{j\notin\Gamma_i}\pi(x_i,y_j).
+  \end{IEEEeqnarray}
+
+  Applying \eqref{eq:discrete_mass_outside_optimal_face_appendix} to
+  $\pi=\hat\pi_{\alpha,\beta}$, and using the non-negativity of the
+  Kullback--Leibler terms in \eqref{primal_avec_2_KL}, yields
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal X\times\mathcal Y}
+    \mathsf c(x,y)\mathrm d\hat\pi_{\alpha,\beta}(x,y)
+    &\leq&
+    SROT_{\alpha,\beta}.
+  \end{IEEEeqnarray}
+  Hence,
+  \begin{IEEEeqnarray}{rCl}
+    \label{eq:discrete_off_face_mass_bound_appendix}
+    \sum_{i=1}^n\sum_{j\notin\Gamma_i}
+    \hat\pi_{\alpha,\beta}(x_i,y_j)
+    \leq
+    \frac{1}{\Delta}
+    \left(SROT_{\alpha,\beta}-SROT\right).
+  \end{IEEEeqnarray}
+
+  For all $i\in\{1,\dots,n\}$, fix an index $j_i\in\Gamma_i$. Define
+  $\tilde\pi$ by
+  \begin{IEEEeqnarray}{rCl}
+    \tilde\pi(x_i,y_j)
+    &=&
+    0,
+    \qquad j\notin\Gamma_i,
+    \\
+    \tilde\pi(x_i,y_j)
+    &=&
+    \hat\pi_{\alpha,\beta}(x_i,y_j),
+    \qquad j\in\Gamma_i\setminus\{j_i\},
+    \\
+    \tilde\pi(x_i,y_{j_i})
+    &=&
+    \hat\pi_{\alpha,\beta}(x_i,y_{j_i})
+    +
+    \sum_{j\notin\Gamma_i}
+    \hat\pi_{\alpha,\beta}(x_i,y_j).
+  \end{IEEEeqnarray}
+  By construction, $\tilde\pi\in\Pi(P,\star)$ and
+  \begin{IEEEeqnarray}{rCl}
+    \tilde\pi(x_i,y_j)
+    &=&
+    0,
+    \qquad
+    i\in\{1,\dots,n\},\ j\notin\Gamma_i.
+  \end{IEEEeqnarray}
+  Thus $\tilde\pi\in\mathcal O$. Moreover,
+  \begin{IEEEeqnarray}{rCl}
+    \label{eq:l1_distance_to_projection_discrete}
+    \|\hat\pi_{\alpha,\beta}-\tilde\pi\|_1
+    &=&
+    2
+    \sum_{i=1}^n
+    \sum_{j\notin\Gamma_i}
+    \hat\pi_{\alpha,\beta}(x_i,y_j).
+  \end{IEEEeqnarray}
+  Combining \eqref{eq:discrete_off_face_mass_bound_appendix} and
+  \eqref{eq:l1_distance_to_projection_discrete} gives
+  \begin{IEEEeqnarray}{rCl}
+    \label{eq:l1_distance_to_optimal_face}
+    \inf_{\pi\in\mathcal O}
+    \|\hat\pi_{\alpha,\beta}-\pi\|_1
+    &\leq&
+    \frac{2}{\Delta}
+    \left(
+    SROT_{\alpha,\beta}-SROT
+    \right).
+  \end{IEEEeqnarray}
+
+  Assume now that every row admits a unique minimizer. Then, for all
+  $i\in\{1,\dots,n\}$, the set $\Gamma_i$ is a singleton. Hence
+  $\mathcal O=\{\pi^\star\}$, where
+  \begin{IEEEeqnarray}{rCl}
+    \pi^\star(x_i,y_j)
+    =
+    \begin{cases}
+      p_i, & \text{if } j\in\Gamma_i,\\
+      0, & \text{otherwise}.
+    \end{cases}
+  \end{IEEEeqnarray}
+  Since $\mathcal O=\{\pi^\star\}$, inequality
+  \eqref{eq:l1_distance_to_optimal_face} yields
+  \begin{IEEEeqnarray}{rCl}
+    \label{eq:l1_distance_unique_minimizer_discrete}
+    \|\hat\pi_{\alpha,\beta}-\pi^\star\|_1
+    &\leq&
+    \frac{2}{\Delta}
+    \left(
+    SROT_{\alpha,\beta}-SROT
+    \right).
+  \end{IEEEeqnarray}
+
+  It remains to prove the second inequality in the statement. Since
+  $\mathcal X$ and $\mathcal Y$ are finite and $q_j>0$ for all
+  $j\in\{1,\dots,m\}$, the measure $\pi^\star$ is absolutely continuous
+  with respect to $P\otimes Q$. Hence,
+  \begin{IEEEeqnarray}{rCl}
+    \label{eq:finite_kl_pi_star_discrete}
+    D_{KL}(\pi^\star\|P\otimes Q)
+    &<&
+    +\infty.
+  \end{IEEEeqnarray}
+  Therefore, Assertion~2 of
+  Theorem~\ref{theoreme_value_convergence_all_limits}, applied with
+  $\tilde\pi=\pi^\star$, yields
+  \begin{IEEEeqnarray}{rCl}
+    \label{eq:value_rate_unique_discrete}
+    SROT_{\alpha,\beta}-SROT
+    &\leq&
+    \alpha D_{KL}(\pi^\star\|P\otimes Q)
+    +
+    \beta
+    D_{KL}\left((\pi^\star)_{\#}^{\mathcal Y}\|Q\right).
+  \end{IEEEeqnarray}
+  Combining \eqref{eq:l1_distance_unique_minimizer_discrete} and
+  \eqref{eq:value_rate_unique_discrete} gives
+  \begin{IEEEeqnarray}{rCl}
+    \|\hat\pi_{\alpha,\beta}-\pi^\star\|_1
+    &\leq&
+    \frac{2}{\Delta}
+    \left(
+    SROT_{\alpha,\beta}-SROT
+    \right)
+    \\
+    &\leq&
+    \frac{2}{\Delta}
+    \left(
+    \alpha D_{KL}(\pi^\star\|P\otimes Q)
+    +
+    \beta
+    D_{KL}\left((\pi^\star)_{\#}^{\mathcal Y}\|Q\right)
+    \right).
+  \end{IEEEeqnarray}
+  This completes the proof.
+
+\textbf{Remark (Tightness of the $L^1$ bound).}
+The geometric factor $2/\Delta$ appearing in Theorem~\ref{theoreme_l1_control_discrete} cannot be improved, as the following minimal example demonstrates. Consider the discrete spaces $\mathcal{X} = \{x_1\}$ and $\mathcal{Y} = \{y_1, y_2\}$ with cost
+\begin{IEEEeqnarray}{rCl}
+  \mathsf{c}(x_1, y_1) &=& 0,
+  \qquad
+  \mathsf{c}(x_1, y_2) \;=\; \Delta,
+\end{IEEEeqnarray}
+where $\Delta > 0$. Since $y_1$ is the unique pointwise minimizer, the row-separation gap defined in \eqref{definition_delta} equals $\Delta$, and the unregularized minimizer of \eqref{primal_non_regularise} is the deterministic coupling
+\begin{IEEEeqnarray}{rCl}
+  \pi^\star(x_1, y_1) &=& 1,
+  \qquad
+  \pi^\star(x_1, y_2) \;=\; 0.
+\end{IEEEeqnarray}
+Any regularized algorithm assigns a small positive mass to the suboptimal target; let the regularized coupling be
+\begin{IEEEeqnarray}{rCl}
+  \hat{\pi}(x_1, y_1) &=& 1 - \epsilon,
+  \qquad
+  \hat{\pi}(x_1, y_2) \;=\; \epsilon,
+\end{IEEEeqnarray}
+for some $\epsilon \in (0, 1)$. The $L^1$ distance to the exact minimizer is
+\begin{IEEEeqnarray}{rCl}
+  \|\hat{\pi} - \pi^\star\|_1
+  &=&
+  |(1 - \epsilon) - 1| + |\epsilon - 0|
+  \;=\;
+  2\epsilon,
+\end{IEEEeqnarray}
+while the cost excess is
+\begin{IEEEeqnarray}{rCl}
+  \int_{\mathcal{X}\times\mathcal{Y}}
+  \mathsf{c}(x, y)\,\mathrm{d}\hat{\pi}(x, y)
+  -
+  SROT
+  &=&
+  0 \cdot (1-\epsilon) + \Delta \cdot \epsilon - 0
+  \;=\;
+  \Delta\epsilon.
+\end{IEEEeqnarray}
+The ratio is therefore
+\begin{IEEEeqnarray}{rCl}
+  \frac{\|\hat{\pi} - \pi^\star\|_1}{\int_{\mathcal{X}\times\mathcal{Y}} \mathsf{c}(x, y)\,\mathrm{d}\hat{\pi}(x, y) - SROT}
+  &=&
+  \frac{2\epsilon}{\Delta\epsilon}
+  \;=\;
+  \frac{2}{\Delta},
+\end{IEEEeqnarray}
+independently of $\epsilon$. This proves that the geometric factor $2/\Delta$ governing the relation between the $L^1$ norm and the primal cost excess in Theorem~\ref{theoreme_l1_control_discrete} cannot be improved.
+
+\section{Convergence Guarantees}
+\label{app:convergence}
+
+\subsection{Proof of Theorem~\ref{theoreme_linear_rate_scaled_hilbert}}
+\begin{IEEEproof}
+  \textcolor{red}{a revoir en detail quand meme, j'ai beaucoup refait. Il reste peut etre des typos ou autres imprecisions}
+  The proof is organized as follows. First, two positive linear operators are introduced and their projective diameters shown to be are bounded. Theorem~2.9 in \cite{Lemmens2013BirkhoffsVO} then yields strict contractions in Hilbert's metric. Next, the operators $\Xi$ and $\Gamma$ are shown to be Lipschitz, and the one step map $\Gamma\circ\Xi$ is shown to be a strict contraction. Finally, the normalization built into $\Gamma$ identifies a complete slice of the positive cone, and the Banach fixed point theorem yields geometric convergence of the scaled iterates. The identification of the limit with the normalized maximizing potentials concludes the argument. Define the positive linear operators
+  \begin{IEEEeqnarray}{rCl}
+    &&\operatorname{K} : \operatorname{L}^\infty(\mathcal Y) \to \operatorname{L}^\infty(\mathcal X),
+    \qquad
+    (\operatorname{K}b)(x)
+    \triangleq
+    \int_{\mathcal Y} e^{-\frac{\mathsf c(x,y)}{\alpha}}\, b(y)\,\mathrm dQ(y),
+    \\[0.4em]
+    &&\operatorname{K}^{\mathsf T} : \operatorname{L}^\infty(\mathcal X) \to \operatorname{L}^\infty(\mathcal Y),
+    \qquad
+    (\operatorname{K}^{\mathsf T}a)(y)
+    \triangleq
+    \int_{\mathcal X} e^{-\frac{\mathsf c(x,y)}{\alpha}}\, a(x)\,\mathrm dP(x).
+  \end{IEEEeqnarray}
+  Since $\mathsf c$ is bounded, it holds for all $(x,y)\in\mathcal X\times\mathcal Y$ that
+  \begin{IEEEeqnarray}{rCl}
+    e^{-\frac{\|\mathsf c\|_\infty}{\alpha}}
+    \;\leq\;
+    e^{-\frac{\mathsf c(x,y)}{\alpha}}
+    \;\leq\;
+    e^{\frac{\|\mathsf c\|_\infty}{\alpha}}.
+  \end{IEEEeqnarray}
+  Hence, for every $b\in \operatorname{L}^\infty_+(\mathcal Y)\setminus\{0\}$ and every $x\in\mathcal X$,
+  \begin{IEEEeqnarray}{rCl}
+    e^{-\frac{\|\mathsf c\|_\infty}{\alpha}}
+    \int_{\mathcal Y} b(y)\,\mathrm dQ(y)
+    \;\leq\;
+    (\operatorname{K}b)(x)
+    \;\leq\;
+    e^{\frac{\|\mathsf c\|_\infty}{\alpha}}
+    \int_{\mathcal Y} b(y)\,\mathrm dQ(y).
+  \end{IEEEeqnarray}
+  Since $\int_{\mathcal Y} b(y)\,\mathrm dQ(y)>0$, this yields $\operatorname{K}b\in \operatorname{L}^\infty_{++}(\mathcal X)$. The same argument gives $\operatorname{K}^{\mathsf T}a\in \operatorname{L}^\infty_{++}(\mathcal Y)$ for every $a\in \operatorname{L}^\infty_+(\mathcal X)\setminus\{0\}$. If $b_1,b_2\in \operatorname{L}^\infty_+(\mathcal Y)\setminus\{0\}$, then for every $x\in\mathcal X$,
+  \begin{IEEEeqnarray}{rCl}
+    \frac{(\operatorname{K}b_1)(x)}{(\operatorname{K}b_2)(x)}
+    &\leq&
+    e^{\frac{2\|\mathsf c\|_\infty}{\alpha}}
+    \frac{\int_{\mathcal Y} b_1(y)\,\mathrm dQ(y)}{\int_{\mathcal Y} b_2(y)\,\mathrm dQ(y)},
+    \\
+    \frac{(\operatorname{K}b_1)(x)}{(\operatorname{K}b_2)(x)}
+    &\geq&
+    e^{-\frac{2\|\mathsf c\|_\infty}{\alpha}}
+    \frac{\int_{\mathcal Y} b_1(y)\,\mathrm dQ(y)}{\int_{\mathcal Y} b_2(y)\,\mathrm dQ(y)}.
+  \end{IEEEeqnarray}
+  Taking the essential supremum and the essential infimum over $x\in\mathcal X$ yields
+  \begin{IEEEeqnarray}{rCl}
+    \label{ghiutyvdjebdjkhbejhvejvedl}
+    d_{\mathrm H}\!\left(\operatorname{K}b_1,\operatorname{K}b_2\right)
+    \;\leq\;
+    \frac{4\|\mathsf c\|_\infty}{\alpha}.
+  \end{IEEEeqnarray}
+  Hence the projective diameter of $\operatorname{K}$ is finite, with
+  \begin{IEEEeqnarray}{rCl}
+    \Delta(\operatorname{K})\leq \frac{4\|\mathsf c\|_\infty}{\alpha}.
+  \end{IEEEeqnarray}
+  The same argument yields
+  \begin{IEEEeqnarray}{rCl}
+    \Delta(\operatorname{K}^{\mathsf T})\leq \frac{4\|\mathsf c\|_\infty}{\alpha}.
+  \end{IEEEeqnarray}
+  Since $\Delta(\operatorname{K})<+\infty$ and $\Delta(\operatorname{K}^{\mathsf T})<+\infty$, Theorem~2.9 in \cite{Lemmens2013BirkhoffsVO} applies to the linear maps
+  \begin{IEEEeqnarray}{rCl}
+\operatorname{K}:\operatorname{L}^\infty(\mathcal Y)\to \operatorname{L}^\infty(\mathcal X)
+\qquad\text{and}\qquad
+\operatorname{K}^{\mathsf T}:\operatorname{L}^\infty(\mathcal X)\to \operatorname{L}^\infty(\mathcal Y),
+    \end{IEEEeqnarray}
+with source and target cones $\operatorname{L}^\infty_+(\mathcal Y)$ and $\operatorname{L}^\infty_+(\mathcal X)$. It follows that $\operatorname{K}$ is a strict contraction, for Hilbert's metric, from the part $\operatorname{L}^\infty_{++}(\mathcal Y)$ of $\operatorname{L}^\infty_+(\mathcal Y)$ into the part $\operatorname{L}^\infty_{++}(\mathcal X)$ of $\operatorname{L}^\infty_+(\mathcal X)$, and that $\operatorname{K}^{\mathsf T}$ is a strict contraction, for Hilbert's metric, from $\operatorname{L}^\infty_{++}(\mathcal X)$ into $\operatorname{L}^\infty_{++}(\mathcal Y)$, with contraction factors $\tanh(\Delta(\operatorname{K})/4)$ and $\tanh(\Delta(\operatorname{K}^{\mathsf T})/4)$, respectively. Hence, for all $b_1,b_2\in \operatorname{L}^\infty_{++}(\mathcal Y)$ and all $a_1,a_2\in \operatorname{L}^\infty_{++}(\mathcal X)$, it holds that 
+  \begin{IEEEeqnarray}{rCl}
+    \label{inegalite_operateur_K}
+    \middlesqueezeequAggressive
+    d_{\mathrm H}\!\left(\operatorname{K}b_1,\operatorname{K}b_2\right)
+    &\leq& \middlesqueezeequAggressive
+    \tanh\!\left(\frac{\Delta(\operatorname{K})}{4}\right)\, d_{\mathrm H}(b_1,b_2)
+    \;\leq\;
+    \tanh\!\left(\frac{\|\mathsf c\|_\infty}{\alpha}\right)\, d_{\mathrm H}(b_1,b_2),
+    \\[0.2em] \middlesqueezeequAggressive
+    \label{inegalite_operateur_K_T}
+    d_{\mathrm H}\!\left(\operatorname{K}^{\mathsf T}a_1,\operatorname{K}^{\mathsf T}a_2\right)
+    &\leq& \middlesqueezeequAggressive
+    \tanh\!\left(\frac{\Delta(\operatorname{K}^{\mathsf T})}{4}\right)\, d_{\mathrm H}(a_1,a_2)
+    \;\leq\;
+    \tanh\!\left(\frac{\|\mathsf c\|_\infty}{\alpha}\right)\, d_{\mathrm H}(a_1,a_2).
+  \end{IEEEeqnarray}
+  The first scaled update satisfies
+  \begin{IEEEeqnarray}{rCl}
+    \Xi(b)(x)=\frac{1}{(\operatorname{K}b)(x)},
+  \end{IEEEeqnarray}
+  for every $b\in \operatorname{L}^\infty_{++}(\mathcal Y)$ and every $x\in\mathcal X$, where $\Xi$ is in \eqref{formule_xi}. Moreover, the definition of Hilbert's projective metric \cite[Equation~(2.2)]{Lemmens2013BirkhoffsVO} implies that, for every pair $f,g$ in either $\operatorname{L}^\infty_{++}(\mathcal X)$ or $\operatorname{L}^\infty_{++}(\mathcal Y)$,
+  \begin{IEEEeqnarray}{rCl}
+    \label{isom_invers}
+    d_{\mathrm H}(f^{-1},g^{-1})=d_{\mathrm H}(f,g).
+  \end{IEEEeqnarray}
+  Consequently, for all $b_1,b_2\in \operatorname{L}^\infty_{++}(\mathcal Y)$,
+  \begin{IEEEeqnarray}{rCl}
+    d_{\mathrm H}\!\left(\Xi(b_1),\Xi(b_2)\right)
+    &=&
+    d_{\mathrm H}\!\left((\operatorname{K}b_1)^{-1},(\operatorname{K}b_2)^{-1}\right)
+    \\
+    &=&
+    d_{\mathrm H}\!\left(\operatorname{K}b_1,\operatorname{K}b_2\right)
+    \\ \label{combine_1}
+    &\leq&
+    \tanh\!\left(\frac{\|\mathsf c\|_\infty}{\alpha}\right)\, d_{\mathrm H}(b_1,b_2).
+  \end{IEEEeqnarray}
+
+  Let $a\in \operatorname{L}^\infty_{++}(\mathcal X)$. The second scaled update can be written as
+  \begin{IEEEeqnarray}{rCl}
+    \Gamma(a)(y)
+    &=&
+    \left(\operatorname{K}^{\mathsf T}a(y)\right)^{-\frac{\beta}{\alpha+\beta}}
+    \left(\int_{\mathcal Y}\left(\operatorname{K}^{\mathsf T}a(y')\right)^{\frac{\alpha}{\alpha+\beta}}\,\mathrm dQ(y')\right)^{\frac{\beta}{\alpha}},
+  \end{IEEEeqnarray}
+  and $\Gamma(a)\in \operatorname{L}^\infty_{++}(\mathcal Y)$, where $\Gamma$ is in \eqref{formule_gamma}. The second factor is a positive scalar independent of $y$. Lemma~2.1(iv) in \cite{Lemmens2013BirkhoffsVO} therefore gives, for all $a_1,a_2\in \operatorname{L}^\infty_{++}(\mathcal X)$,
+  \begin{IEEEeqnarray}{rCl}
+    d_{\mathrm H}\!\left(\Gamma(a_1),\Gamma(a_2)\right)
+    &=&
+    d_{\mathrm H}\!\left(\big(\operatorname{K}^{\mathsf T}a_1\big)^{-\frac{\beta}{\alpha+\beta}},\big(\operatorname{K}^{\mathsf T}a_2\big)^{-\frac{\beta}{\alpha+\beta}}\right).
+  \end{IEEEeqnarray}
+  The map $f\mapsto f^{\frac{\beta}{\alpha+\beta}}$ is order-preserving and homogeneous of degree $\frac{\beta}{\alpha+\beta}$. Proposition~2.6 in \cite{Lemmens2013BirkhoffsVO} then implies
+  \begin{IEEEeqnarray}{rCl}
+    d_{\mathrm H}\!\left(f^{\frac{\beta}{\alpha+\beta}},g^{\frac{\beta}{\alpha+\beta}}\right)
+    \;\leq\;
+    \frac{\beta}{\alpha+\beta}\, d_{\mathrm H}(f,g)
+  \end{IEEEeqnarray}
+  for all $f,g\in \operatorname{L}^\infty_{++}(\mathcal Y)$. Together with \eqref{isom_invers}, this yields
+  \begin{IEEEeqnarray}{rCl}
+    d_{\mathrm H}\!\left(\Gamma(a_1),\Gamma(a_2)\right)
+    &\leq&
+    \frac{\beta}{\alpha+\beta}\, d_{\mathrm H}\!\left(\operatorname{K}^{\mathsf T}a_1,\operatorname{K}^{\mathsf T}a_2\right)
+    \\ \label{combine_2}
+    &\leq&
+    \frac{\beta}{\alpha+\beta}\tanh\!\left(\frac{\|\mathsf c\|_\infty}{\alpha}\right)\, d_{\mathrm H}(a_1,a_2).
+  \end{IEEEeqnarray}
+  Combining \eqref{combine_1} and \eqref{combine_2} shows that the one step map $T\triangleq \Gamma\circ\Xi$ satisfies, for all $b_1,b_2\in \operatorname{L}^\infty_{++}(\mathcal Y)$,
+  \begin{IEEEeqnarray}{rCl}
+    \label{dtryuioghjfhgjklgvhjkbkkjh}
+    d_{\mathrm H}\!\left(T(b_1),T(b_2)\right)
+    &\leq&
+    \frac{\beta}{\alpha+\beta}\tanh\!\left(\frac{\|\mathsf c\|_\infty}{\alpha}\right)^{\!2}\, d_{\mathrm H}(b_1,b_2).
+  \end{IEEEeqnarray}
+
+  It remains to identify a complete metric space left invariant under $T$. For every $a\in \operatorname{L}^\infty_{++}(\mathcal X)$ and every $y\in\mathcal Y$,
+  \begin{IEEEeqnarray}{rCl}
+    \Gamma(a)(y)^{-\alpha/\beta}
+    &=&
+    \frac{\left(\operatorname{K}^{\mathsf T}a(y)\right)^{\frac{\alpha}{\alpha+\beta}}}
+    {\int_{\mathcal Y}\left(\operatorname{K}^{\mathsf T}a(y')\right)^{\frac{\alpha}{\alpha+\beta}}\,\mathrm dQ(y')}.
+  \end{IEEEeqnarray}
+  Integration with respect to $Q$ yields
+  \begin{IEEEeqnarray}{rCl}
+    \label{uyiytfuihjuyttyfytrtrrrrrrrtrtrtrtrtrtr}
+    \int_{\mathcal Y}\Gamma(a)(y)^{-\alpha/\beta}\,\mathrm dQ(y)
+    &=&
+    1.
+  \end{IEEEeqnarray}
+  Hence every iterate $b^{(l)}$ belongs to
+  \begin{IEEEeqnarray}{rCl}
+    \label{formule_de_sigma}
+    \Sigma
+    \triangleq
+    \left\{
+      b\in \operatorname{L}^\infty_{++}(\mathcal Y):
+      \int_{\mathcal Y} b(y)^{-\alpha/\beta}\,\mathrm dQ(y)=1
+    \right\}.
+  \end{IEEEeqnarray}
+  Consider
+  \begin{IEEEeqnarray}{rCl}
+    q(b)
+    \triangleq
+    \left(\int_{\mathcal Y} b(y)^{-\alpha/\beta}\,\mathrm dQ(y)\right)^{-\beta/\alpha}.
+  \end{IEEEeqnarray}
+  This map is homogeneous of degree $1$. It is also continuous on $\operatorname{L}^\infty_{++}(\mathcal Y)$ for the $\operatorname{L}^\infty$ norm. Indeed, let $b$ be in $\operatorname{L}^\infty_{++}(\mathcal Y)$ and $(b_n)_{n\geq 1}$ be a sequence in $\operatorname{L}^\infty_{++}(\mathcal Y)$ such that $b_n\to b$ in $\operatorname{L}^\infty(\mathcal Y)$, and set
+  \begin{IEEEeqnarray}{rCl}
+    m_b \triangleq \operatorname*{ess\,inf}_{Q} b >0.
+  \end{IEEEeqnarray}
+  There exists $n_0\in\mathbb N$ such that $b_n(y)\geq m_b/2$ for $Q$-almost every $y\in\mathcal Y$ and every $n\geq n_0$. The map $t\mapsto t^{-\alpha/\beta}$ is Lipschitz on $[m_b/2,+\infty)$, hence
+  \begin{IEEEeqnarray}{rCl}
+    \left\|b_n^{-\alpha/\beta}-b^{-\alpha/\beta}\right\|_\infty \xrightarrow[n\to+\infty]{} 0.
+  \end{IEEEeqnarray}
+  Therefore
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal Y} b_n(y)^{-\alpha/\beta}\,\mathrm dQ(y)
+    \xrightarrow[n\to+\infty]{}
+    \int_{\mathcal Y} b(y)^{-\alpha/\beta}\,\mathrm dQ(y),
+  \end{IEEEeqnarray}
+  and then $q(b_n)\to q(b)$. The cone $\operatorname{L}^\infty_+(\mathcal Y)$ is closed and normal in the Banach space $\operatorname{L}^\infty(\mathcal Y)$, and $\operatorname{L}^\infty_{++}(\mathcal Y)$ is the part containing the constant function $1$. Lemma~2.1 in \cite{nussbaum2007fixed}, applied with the constant function $1$, yields that $(\Sigma,d_{\mathrm H})$ is a complete metric space. Since $b^{(0)}\equiv 1$ belongs to $\Sigma$ and $T(\Sigma)\subset \Sigma$ follows from \eqref{uyiytfuihjuyttyfytrtrrrrrrrtrtrtrtrtrtr}, the Banach fixed point theorem implies the existence of a unique fixed point $\hat b\in\Sigma$ and gives, for all $l\geq 0$,
+  \begin{IEEEeqnarray}{rCl}
+    d_{\mathrm H}\!\left(b^{(l)},\hat b\right)
+    &\leq&
+    \left(
+      \frac{\beta}{\alpha+\beta}\tanh\!\left(\frac{\|\mathsf c\|_\infty}{\alpha}\right)^{\!2}
+    \right)^{l}
+    d_{\mathrm H}\!\left(b^{(0)},\hat b\right),
+  \end{IEEEeqnarray}
+  which is exactly \eqref{linear_speed_1}. Define
+  \begin{IEEEeqnarray}{rCl}
+    \hat a \triangleq \Xi(\hat b).
+  \end{IEEEeqnarray}
+  Then, for every $l\geq 1$,
+  \begin{IEEEeqnarray}{rCl}
+    d_{\mathrm H}\!\left(a^{(l)},\hat a\right)
+    &=&
+    d_{\mathrm H}\!\left(\Xi(b^{(l-1)}),\Xi(\hat b)\right)
+    \\
+    &\leq&
+    \tanh\!\left(\frac{\|\mathsf c\|_\infty}{\alpha}\right)\, d_{\mathrm H}\!\left(b^{(l-1)},\hat b\right)
+    \\
+    &\leq&
+    \tanh\!\left(\frac{\|\mathsf c\|_\infty}{\alpha}\right)\rho_{(\mathsf c,\alpha,\beta)}^{\,l-1}\, d_{\mathrm H}\!\left(b^{(0)},\hat b\right),
+  \end{IEEEeqnarray}
+  which is exactly \eqref{linear_speed_2}.
+
+  Finally, define
+  \begin{IEEEeqnarray}{rCl}
+    \hat u \triangleq \alpha \log(\hat a)\in \operatorname{L}^\infty(\mathcal X),
+    \qquad
+    \hat v \triangleq \alpha \log(\hat b)\in \operatorname{L}^\infty(\mathcal Y).
+  \end{IEEEeqnarray}
+  The fixed point relation $T(\hat b)=\hat b$ and the definition $\hat a=\Xi(\hat b)$ are equivalent to
+  \begin{IEEEeqnarray}{rCl}
+    \hat u=\Phi(\hat v),
+    \qquad
+    \hat v=\Psi(\hat u),
+  \end{IEEEeqnarray}
+  where $\Phi$ and $\Psi$ are defined in \eqref{formule_de_phi} and \eqref{formule_de_psi}. Corollary~\ref{corollaire_transform} and Theorem~\ref{theoreme_dual_attainment} then imply that $\hat u$ and $\hat v$ are the unique maximizers for problem \eqref{dual_maversion_fonctionnelle_C} that satisfy \eqref{transform_pour_u} and \eqref{transform_pour_v} simultaneously. Therefore, $\hat a$ and $\hat b$ are the associated unique scaled maximizing potentials.
+\end{IEEEproof}
+
+\subsection{Corollary~\ref{corollaire_convergence_potentiels}}
+
+\begin{corollary}
+  \label{corollaire_convergence_potentiels}
+  The unscaled iterates $(u^{(l)},v^{(l)})$ defined by~\eqref{equations_algo_1} converge uniformly to $(\hat u,\hat v)$, the unique pair of maximizers for problem \eqref{dual_maversion_fonctionnelle_C} that satisfy \eqref{transform_pour_u} and \eqref{transform_pour_v} simultaneously, at a linear rate: for all $l\ge 0$,
+  \begin{IEEEeqnarray}{rCl}
+    \label{convergence_norme_infinie_linear_v}
+    \|v^{(l)} - \hat v\|_\infty
+    &\leq&
+    \alpha \left( \rho_{(\mathsf c,\alpha,\beta)}\right)^{\,l}d_{\mathrm H}\!\left(b^{(0)},\hat b\right),
+    \\
+    \label{convergence_norme_infinie_linear_u}
+    \|u^{(l+1)} - \hat u\|_\infty
+    &\leq&
+    \alpha \left( \rho_{(\mathsf c,\alpha,\beta)}\right)^{\,l}d_{\mathrm H}\!\left(b^{(0)},\hat b\right).
+  \end{IEEEeqnarray}
+\end{corollary}
+
+
+
+
+
+
+\begin{IEEEproof}
+  The proof is split into three parts; the first one deals with \eqref{convergence_norme_infinie_linear_v}, the second one with \eqref{convergence_norme_infinie_linear_u}, and the third one with \eqref{convergence_densite_primale}. Let $(u^{(l)},v^{(l)})$ be the unscaled iterates defined by~\eqref{equations_algo_1}, $(a^{(l)},b^{(l)})$ be the scaled iterates defined by Algorithm~\ref{algo_2_scaled}, and $(\hat u,\hat v)$ be the unique pair of maximizers satisfying \eqref{transform_pour_u} and \eqref{transform_pour_v} simultaneously. Recall that the two parametrizations are linked through
+  \begin{IEEEeqnarray}{rCl}
+    u^{(l)} = \alpha \log\!\big(a^{(l)}\big),
+    \qquad
+    v^{(l)} = \alpha \log\!\big(b^{(l)}\big).
+  \end{IEEEeqnarray}
+  Hence, it holds that
+  \begin{IEEEeqnarray}{rCl}
+    \|v^{(l)}-\hat v\|_\infty
+    = \alpha \left\|\log\!\left(\frac{b^{(l)}}{\hat b}\right)\right\|_\infty.
+    \label{eq:vinf_log_ratio}
+  \end{IEEEeqnarray}
+  Define the pointwise ratio 
+  \begin{IEEEeqnarray}{rCl}
+    r^{(l)}(y) \triangleq \frac{b^{(l)}(y)}{\hat b(y)}, \qquad y\in\mathcal Y,
+  \end{IEEEeqnarray}
+  and its bounds
+  \begin{IEEEeqnarray}{rCl}
+    m^{(l)} \triangleq \inf_{y\in \mathcal Y}\, r^{(l)}(y),
+    \qquad
+    M^{(l)} \triangleq \sup_{y\in \mathcal Y}\, r^{(l)}(y).
+  \end{IEEEeqnarray}
+  By definition of Hilbert's projective metric on $\mathrm{L}^\infty_{++}(\mathcal Y)$ \cite[Equation~(2.2)]{Lemmens2013BirkhoffsVO}, it holds that
+  \begin{IEEEeqnarray}{rCl}
+    d_{\mathrm H}\!\big(b^{(l)},\hat b\big)
+    = \log\!\left(\frac{M^{(l)}}{m^{(l)}}\right).
+    \label{eq:hilbert_ratio}
+  \end{IEEEeqnarray}
+  It remains to show that
+  \begin{IEEEeqnarray}{rCl}
+    m^{(l)} \le 1 \le M^{(l)}.
+    \label{eq:m1M}
+  \end{IEEEeqnarray}
+  Since the iterates $b^{(l)}$ are in $\Sigma$ for all $l$ and $\hat b\in\Sigma$, where $\Sigma$ is in \eqref{formule_de_sigma}, the same gauge constraint as in \eqref{uyiytfuihjuyttyfytrtrrrrrrrtrtrtrtrtrtr} holds
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal Y} \big(b^{(l)}(y)\big)^{-\alpha/\beta}\,\mathrm dQ(y)=1,
+    \qquad \mbox{and }
+    \int_{\mathcal Y} \big(\hat b(y)\big)^{-\alpha/\beta}\,\mathrm dQ(y)=1.
+    \label{eq:gauge_constraint_b}
+  \end{IEEEeqnarray}
+  The map $t\mapsto t^{-\alpha/\beta}$ is strictly decreasing on $(0,+\infty)$. Assume by contradiction that
+  $M^{(l)}<1$. Then $r^{(l)}(y)<1$ for $Q$-a.e.\ $y$, i.e., $b^{(l)}(y)<\hat b(y)$ for $Q$-a.e.\ $y$,
+  and the strict monotonicity of the integral implies
+  \begin{IEEEeqnarray}{rCl}
+    \int_{\mathcal Y} \big(b^{(l)}(y)\big)^{-\alpha/\beta}\,\mathrm dQ(y)
+    >
+    \int_{\mathcal Y} \big(\hat b(y)\big)^{-\alpha/\beta}\,\mathrm dQ(y),
+  \end{IEEEeqnarray}
+  which contradicts \eqref{eq:gauge_constraint_b}. Therefore $M^{(l)}\ge 1$. The case $m^{(l)}>1$ is ruled out similarly. Thus, the inequalities in \eqref{eq:m1M} are established.  Combining \eqref{eq:m1M} with $\|\log r^{(l)}\|_\infty=\max\{-\log m^{(l)},\,\log M^{(l)}\}$ gives
+  \begin{IEEEeqnarray}{rCl}
+    \left\|\log\!\left(\frac{b^{(l)}}{\hat b}\right)\right\|_\infty
+    &=& \max\{-\log m^{(l)},\,\log M^{(l)}\} \\
+    &\le& \log\!\left(\frac{M^{(l)}}{m^{(l)}}\right) \\
+    &=& d_{\mathrm H}\!\big(b^{(l)},\hat b\big),
+    \label{eq:log_ratio_le_hilbert}
+  \end{IEEEeqnarray}
+  where the last equality follows from \eqref{eq:hilbert_ratio}. Plugging \eqref{eq:log_ratio_le_hilbert} into
+  \eqref{eq:vinf_log_ratio} yields
+  \begin{IEEEeqnarray}{rCl}
+    \|v^{(l)}-\hat v\|_\infty \le \alpha\, d_{\mathrm H}\!\big(b^{(l)},\hat b\big).
+  \end{IEEEeqnarray}
+  Combining the previous inequality with \eqref{linear_speed_1} concludes the proof of \eqref{convergence_norme_infinie_linear_v}. Regarding the proof of \eqref{convergence_norme_infinie_linear_u}, recall from~\eqref{equations_algo_1} that
+  \begin{IEEEeqnarray}{rCl}
+    u^{(l+1)} = \Phi\!\big(v^{(l)}\big),
+    \qquad \mbox{and }
+    \hat u = \Phi(\hat v),
+    \label{eq:u_update_phi}
+  \end{IEEEeqnarray}
+  where $\Phi$ is in \eqref{formule_de_phi}.  Let $v,w$ be in $\mathrm{L}^\infty(\mathcal Y)$ and set $\delta\triangleq\|v-w\|_\infty$. Then, for $Q$-a.e.\ $y$ in $\mathcal Y$, it holds that
+  \begin{IEEEeqnarray}{rCl}
+    -\delta \le v(y)-w(y)\le \delta
+    \quad\Longrightarrow\quad
+    e^{-\delta/\alpha}\le \exp\!\left(\frac{v(y)-w(y)}{\alpha}\right)\le e^{\delta/\alpha}.
+  \end{IEEEeqnarray}
+  Multiplying by $\exp\!\left(\frac{w(y)-\mathsf c(x,y)}{\alpha}\right)$ and integrating with respect to $Q$ yields,
+  for every $x\in\mathcal X$,
+  \begin{IEEEeqnarray}{rCl}
+    \middlesqueezeequAggressive
+    e^{-\delta/\alpha}
+    \!\!\int_{\mathcal Y}\!\exp\!\left(\frac{w(y)-\mathsf c(x,y)}{\alpha}\right)\,\mathrm dQ(y)
+    &\le& \middlesqueezeequAggressive
+    \int_{\mathcal Y}\!\exp\!\left(\frac{v(y)-\mathsf c(x,y)}{\alpha}\right)\,\mathrm dQ(y) \\
+    &\le& \middlesqueezeequAggressive
+    e^{\delta/\alpha}
+    \!\!\int_{\mathcal Y}\!\exp\!\left(\frac{w(y)-\mathsf c(x,y)}{\alpha}\right)\,\mathrm dQ(y). \ \ \ \ 
+  \end{IEEEeqnarray}
+  Applying $-\alpha$ times the logarithm to the previous inequalities yields, for every $x\in\mathcal X$,
+  \begin{IEEEeqnarray}{rCl}
+    \Phi(w)(x)-\delta \le \Phi(v)(x)\le \Phi(w)(x)+\delta,
+  \end{IEEEeqnarray}
+  hence
+  \begin{IEEEeqnarray}{rCl}
+    \|\Phi(v)-\Phi(w)\|_\infty \le \|v-w\|_\infty.
+    \label{eq:phi_1_lipschitz}
+  \end{IEEEeqnarray}
+  Combining \eqref{eq:u_update_phi} with \eqref{eq:phi_1_lipschitz} yields
+  \begin{IEEEeqnarray}{rCl}
+    \|u^{(l+1)}-\hat u\|_\infty
+    = \|\Phi(v^{(l)})-\Phi(\hat v)\|_\infty
+    \le \|v^{(l)}-\hat v\|_\infty.
+  \end{IEEEeqnarray}
+  Together with \eqref{convergence_norme_infinie_linear_v}, this implies
+  \begin{IEEEeqnarray}{rCl}
+    \|u^{(l+1)}-\hat u\|_\infty
+    \le \alpha\, d_{\mathrm H}\!\big(b^{(l)},\hat b\big).
+  \end{IEEEeqnarray}
+  Finally, applying \eqref{linear_speed_1} concludes the proof of \eqref{convergence_norme_infinie_linear_u}.
+\end{IEEEproof}
+
+\subsection{Corollary~\ref{corollaire_convergence_objectif}}
+
+\begin{corollary}
+  \label{corollaire_convergence_objectif}
+  Let $(u^{(l)}, v^{(l)})_{l \geq 0}$ be the unscaled iterates defined by~\eqref{equations_algo_1}.
+  The sequence $\bigl(\mathsf{D}_{\alpha,\beta}(u^{(l)}, v^{(l)})\bigr)_{l \geq 0}$ is
+  non-decreasing and converges to $\mathsf{P}_{\alpha,\beta}(\hat{\pi})$ at a linear rate:
+  for all $l \geq 0$,
+  \begin{IEEEeqnarray}{rCl}
+    \label{borne_convergence_objectif}
+    0
+    &\leq&
+    \mathsf{P}_{\alpha,\beta}(\hat{\pi})
+    - \mathsf{D}_{\alpha,\beta}\!\left(u^{(l)}, v^{(l)}\right)
+    \;\leq\;
+    4\alpha
+    \left(\rho_{(\mathsf{c},\alpha,\beta)}\right)^{l}
+    d_{\mathrm{H}}\!\left(b^{(0)}, \hat{b}\right),
+  \end{IEEEeqnarray}
+  where $\rho_{(\mathsf{c},\alpha,\beta)}$ is defined in \eqref{formule_rho} and
+  $\hat{b} \triangleq e^{\hat{v}/\alpha}$.
+\end{corollary}
+
+\begin{IEEEproof}
+  From Corollary~\ref{corollaire_transform}, each alternating maximization step
+  does not decrease the value of $\mathsf{D}_{\alpha,\beta}$, hence
+  $\mathsf{D}_{\alpha,\beta}(u^{(l)},v^{(l)})\leq\mathsf{D}_{\alpha,\beta}(u^{(l+1)},v^{(l+1)})$ for
+  all $l\geq 0$.  Strong duality, established in
+  Theorem~\ref{theoreme_attainment_primal}, provides the left-hand inequality in \eqref{borne_convergence_objectif}. The right-hand inequality rests on the following observation: for any
+  measurable bounded functions $f$ and $g$ on a probability space
+  $(\Omega,\mu)$, it holds that
+  \begin{IEEEeqnarray}{rCl}
+    \label{log_integral_lipschitz}
+    \left|\log\!\int_\Omega\! e^{f(t)}\,\mathrm{d}\mu(t)
+    \;-\;
+    \log\!\int_\Omega\! e^{g(t)}\,\mathrm{d}\mu(t)\right|
+    \;\leq\;
+    \|f - g\|_\infty.
+  \end{IEEEeqnarray}
+  Indeed, $\int e^{f(t)}\,\mathrm{d}\mu(t)\leq e^{\|f-g\|_\infty}\!\int e^{g(t)}\,\mathrm{d}\mu(t)$,
+  from which it can be deduced that
+  \begin{IEEEeqnarray}{rCl}
+    \log\!\int_\Omega e^{f(t)}\,\mathrm{d}\mu(t)-\log\!\int_\Omega e^{g(t)}\,\mathrm{d}\mu(t)\leq\|f-g\|_\infty.
+  \end{IEEEeqnarray}
+  The reverse inequality is obtained symmetrically. From definition \eqref{dual_maversion_fonctionnelle_C}, the gap decomposes as
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \middlesqueezeequBrutal
+    \mathsf{D}_{\alpha,\beta}(\hat{u},\hat{v})-\mathsf{D}_{\alpha,\beta}(u^{(l)},v^{(l)})
+    &=&
+    \int_{\mathcal{X}}\!\bigl(\hat{u}-u^{(l)}\bigr)\,\mathrm{d}P\\
+    \nonumber
+    &&-\;\beta\!\left[\log\!\int_{\mathcal{Y}}\!e^{-\hat{v}(y)/\beta}\,\mathrm{d}Q(y)
+       \;-\;\log\!\int_{\mathcal{Y}}\!e^{-v^{(l)}(y)/\beta}\,\mathrm{d}Q(y)\right]\\
+    && \middlesqueezeequBrutal -\;\alpha\!\Bigg[
+      \log\!\int_{\mathcal{X}\times\mathcal{Y}}\!
+        e^{(\hat{u}(x)+\hat{v}(y)-\mathsf{c}(x,y))/\alpha}\,\mathrm{d}P\otimes Q(x,y) \nonumber \\
+      && \ \ \ \ \ \  \middlesqueezeequBrutal \;-\;     \label{decomposition_gap_objectif}
+      \log\!\int_{\mathcal{X}\times\mathcal{Y}}\!
+        e^{(u^{(l)}(x)+v^{(l)}(y)-\mathsf{c}(x,y))/\alpha}\,\mathrm{d}P\otimes Q(x,y)
+    \Bigg]\!.\ \ \ \
+  \end{IEEEeqnarray}
+  Applying \eqref{log_integral_lipschitz} to the second and third terms of
+  \eqref{decomposition_gap_objectif}, and using the fact that $P$ is a
+  probability measure for the first term, yields
+  \begin{IEEEeqnarray}{rCl}
+    \label{borne_gap_objectif_potentiels}
+    \mathsf{D}_{\alpha,\beta}(\hat{u},\hat{v})-\mathsf{D}_{\alpha,\beta}(u^{(l)},v^{(l)})
+    \;\leq\;
+    2\,\bigl\|\hat{u}-u^{(l)}\bigr\|_\infty
+    \;+\;
+    2\,\bigl\|\hat{v}-v^{(l)}\bigr\|_\infty.
+  \end{IEEEeqnarray}
+  Applying \eqref{convergence_norme_infinie_linear_u} and
+  \eqref{convergence_norme_infinie_linear_v} to the right-hand side of
+  \eqref{borne_gap_objectif_potentiels} concludes the proof.
+\end{IEEEproof}
+
+\subsection{Corollary \ref{corollaire_convergence_mesure_primale}}
+
+\begin{corollary}
+  \label{corollaire_convergence_mesure_primale}
+  Let $(u^{(l)},v^{(l)})_{l\geq 0}$ be the unscaled iterates defined by~\eqref{equations_algo_1}, and let $M\triangleq\max\!\bigl(2,\,3\tfrac{\beta+1}{\alpha+\beta}\bigr)$. For each $l\geq 0$, define the measure $\pi^{(l)}$ on $\mathcal{X}\times\mathcal{Y}$ through
+  \begin{IEEEeqnarray}{rCl}
+    \label{definition_iterate_primal}
+    \frac{\mathrm{d}\pi^{(l)}}{\mathrm{d}P\otimes Q}(x,y)
+    \;\triangleq\;
+    \exp\!\left(
+      \frac{u^{(l+1)}(x)+v^{(l)}(y)-\mathsf{c}(x,y)}{\alpha}
+    \right).
+  \end{IEEEeqnarray}
+  Then $\pi^{(l)}\in\Pi(P,\star)$ for all $l\geq 0$, and the sequence $\left(\mathrm{d}\pi^{(l)}/\mathrm{d}P\otimes Q\right)$ converges to $\mathrm{d}\hat\pi/\mathrm{d}P\otimes Q$ in $\operatorname{L}^\infty(\mathcal X \times \mathcal Y)$ at a linear speed, that is
+  \begin{IEEEeqnarray}{rCl}
+    \label{convergence_densite_primale}
+    \left\|
+      \frac{\mathrm{d}\pi^{(l)}}{\mathrm{d}P\otimes Q}
+      -
+      \frac{\mathrm{d}\hat\pi}{\mathrm{d}P\otimes Q}
+    \right\|_{\infty}
+    \;\leq\;
+    2\,e^{(2M+2)\|\mathsf{c}\|_\infty/\alpha}
+    \,\left( \rho_{(\mathsf c,\alpha,\beta)}\right)^{\,l}\,
+    d_{\mathrm{H}}\!\left(b^{(0)},\hat{b}\right),
+  \end{IEEEeqnarray}
+  where $\rho_{(\mathsf{c},\alpha,\beta)}$ is defined in \eqref{formule_rho}. In particular, $\pi^{(l)}$ converges to $\hat\pi$ in total variation at the same linear rate.
+\end{corollary}
+
+
+
+
+\begin{IEEEproof}
+  The proof establishes successively that $\pi^{(l)}$ is in $\Pi(P,\star)$, that
+  the relevant exponents are uniformly bounded, and that this bound combined
+  with the linear convergence of the potentials yields
+  \eqref{convergence_densite_primale}. Since $u^{(l+1)}=\Phi(v^{(l)})$ by~\eqref{update_unscaled_u}, the definition \eqref{formule_de_phi} of $\Phi$ gives, for every $x\in\mathcal{X}$,
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    \int_{\mathcal{Y}}
+      \frac{\mathrm{d}\pi^{(l)}}{\mathrm{d}P\otimes Q}(x,y)\,\mathrm{d}Q(y)
+    &=&
+    e^{u^{(l+1)}(x)/\alpha}
+    \int_{\mathcal{Y}}\!
+      e^{(v^{(l)}(y)-\mathsf{c}(x,y))/\alpha}\,\mathrm{d}Q(y)\\
+    &=&
+    e^{u^{(l+1)}(x)/\alpha}\cdot e^{-u^{(l+1)}(x)/\alpha}
+    \;=\; 1.
+  \end{IEEEeqnarray}
+  Fubini's theorem \cite[Theorem~8.8]{rudin1987real} then implies that
+  $\pi^{(l)}$ is a probability measure with first marginal
+  $(\pi^{(l)})_{\#}^{\mathcal{X}}=P$, hence $\pi^{(l)}\in\Pi(P,\star)$. From \eqref{inegalite_mon_dual_2}, it holds that $\|v^{(l)}\|_\infty\leq
+  M\|\mathsf{c}\|_\infty$ for all $l\geq 1$, and from
+  \eqref{inegalite_mon_dual_1}, $\|u^{(l+1)}\|_\infty\leq
+  \|v^{(l)}\|_\infty+\|\mathsf{c}\|_\infty \leq(M+1)\|\mathsf{c}\|_\infty$
+  for all $l\geq 1$. The same estimates hold for $\hat{u}$ and $\hat{v}$,
+  since $(\hat{u},\hat{v})$ satisfies \eqref{transform_pour_u} and
+  \eqref{transform_pour_v}. Hence, for all
+  $(x,y)\in\mathcal{X}\times\mathcal{Y}$ and all $l\geq 0$, the two
+  arguments
+  \begin{IEEEeqnarray}{rCl}
+    \label{borne_arguments_exp}
+    \frac{u^{(l+1)}(x)+v^{(l)}(y)-\mathsf{c}(x,y)}{\alpha}
+    \quad\text{and}\quad
+    \frac{\hat{u}(x)+\hat{v}(y)-\mathsf{c}(x,y)}{\alpha}
+  \end{IEEEeqnarray}
+  are both bounded in absolute value by $(2M+2)\|\mathsf{c}\|_\infty/\alpha$. For real numbers $a$ and $b$ with $|a|,|b|\leq R$, the mean value theorem
+  gives $|e^a-e^b|\leq e^R|a-b|$. Applying this pointwise with
+  $R=(2M+2)\|\mathsf{c}\|_\infty/\alpha$ and using \eqref{borne_arguments_exp},
+  for all $(x,y)\in\mathcal{X}\times\mathcal{Y}$ it holds that
+  \begin{IEEEeqnarray}{rCl}
+    \nonumber
+    &&\left|
+      \frac{\mathrm{d}\pi^{(l)}}{\mathrm{d}P\otimes Q}(x,y)
+      -
+      \frac{\mathrm{d}\hat\pi}{\mathrm{d}P\otimes Q}(x,y)
+    \right| \\
+    &&\leq
+    \frac{e^{(2M+2)\|\mathsf{c}\|_\infty/\alpha}}{\alpha}
+    \left(
+      \bigl|u^{(l+1)}(x)-\hat{u}(x)\bigr|
+      +
+      \bigl|v^{(l)}(y)-\hat{v}(y)\bigr|
+    \right).\ \ \ \ \
+  \end{IEEEeqnarray}
+  Applying \eqref{convergence_norme_infinie_linear_u} and
+  \eqref{convergence_norme_infinie_linear_v} to the previous expression
+  yields
+  \begin{IEEEeqnarray}{rCl}
+    \left\|
+      \frac{\mathrm{d}\pi^{(l)}}{\mathrm{d}P\otimes Q}
+      -
+      \frac{\mathrm{d}\hat\pi}{\mathrm{d}P\otimes Q}
+    \right\|_\infty
+    &\leq&
+    2\,e^{(2M+2)\|\mathsf{c}\|_\infty/\alpha}
+    \,\rho_{(\mathsf{c},\alpha,\beta)}^l\,
+    d_{\mathrm{H}}\!\left(b^{(0)},\hat{b}\right),
+  \end{IEEEeqnarray}
+  which gives \eqref{convergence_densite_primale}. The total variation bound
+  then follows from
+  \begin{IEEEeqnarray}{rCl}
+    \label{convergence_tv}
+    \bigl\|\pi^{(l)}-\hat\pi\bigr\|_{TV}
+    \;\triangleq\;
+    \frac{1}{2}
+    \int_{\mathcal{X}\times\mathcal{Y}}\!
+      \left|
+        \frac{\mathrm{d}\pi^{(l)}}{\mathrm{d}P\otimes Q}
+        -
+        \frac{\mathrm{d}\hat\pi}{\mathrm{d}P\otimes Q}
+      \right|\,\mathrm{d}P\otimes Q
+    \;\leq\;
+    \frac{1}{2}
+    \left\|
+      \frac{\mathrm{d}\pi^{(l)}}{\mathrm{d}P\otimes Q}
+      -
+      \frac{\mathrm{d}\hat\pi}{\mathrm{d}P\otimes Q}
+    \right\|_\infty, \ \ \ \ \
+  \end{IEEEeqnarray}
+  since $P\otimes Q$ is a probability measure.
+\end{IEEEproof}
+
+\newpage
+\input{checklist.tex}
+
+\end{document}

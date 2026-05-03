@@ -1,0 +1,240 @@
+\begin{thebibliography}{30}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Altschuler et~al.(2017)Altschuler, Weed, and
+  Rigollet]{altschuler2017nearlinear}
+Jason Altschuler, Jonathan Weed, and Philippe Rigollet.
+\newblock {Near-Linear Time Approximation Algorithms for Optimal Transport via
+  Sinkhorn Iteration}.
+\newblock In \emph{Advances in Neural Information Processing Systems
+  (NeurIPS)}, volume~30, 2017.
+
+\bibitem[Billingsley(1999)]{billingsley1999convergence}
+Patrick Billingsley.
+\newblock \emph{{Convergence of Probability Measures}}.
+\newblock John Wiley \& Sons, New York, NY, USA, 2 edition, 1999.
+\newblock \doi{10.1002/9780470316962}.
+
+\bibitem[Blondel et~al.(2018)Blondel, Seguy, and
+  Rolet]{blondel2018smoothsparseoptimaltransport}
+Mathieu Blondel, Vivien Seguy, and Antoine Rolet.
+\newblock {Smooth and Sparse Optimal Transport}.
+\newblock In \emph{Proceedings of the International Conference on Artificial
+  Intelligence and Statistics (AISTATS)}, pages 314--323, Mar. 2018.
+
+\bibitem[Br{\'e}zis(2011)]{brezissobolev}
+Ha{\"i}m Br{\'e}zis.
+\newblock \emph{{Functional Analysis, Sobolev Spaces and Partial Differential
+  Equations}}.
+\newblock Springer, New York, NY, USA, 1 edition, 2011.
+\newblock \doi{10.1007/978-0-387-70914-7}.
+
+\bibitem[Budhiraja and Dupuis(2019)]{budhiraja2019relative}
+Amarjit Budhiraja and Paul Dupuis.
+\newblock {Relative Entropy and Tightness of Measures}.
+\newblock In \emph{Analysis and Approximation of Rare Events}, volume~94 of
+  \emph{Probability Theory and Stochastic Modelling}, pages 31--47. Springer,
+  New York, NY, USA, 2019.
+\newblock \doi{10.1007/978-1-4939-9579-0_2}.
+
+\bibitem[Carlier et~al.(2017)Carlier, Duval, Peyr{\'e}, and
+  Schmitzer]{carlier2017convergence}
+Guillaume Carlier, Vincent Duval, Gabriel Peyr{\'e}, and Bernhard Schmitzer.
+\newblock {Convergence of Entropic Schemes for Optimal Transport and Gradient
+  Flows}.
+\newblock \emph{SIAM Journal on Mathematical Analysis}, 49\penalty0
+  (2):\penalty0 1385--1418, 2017.
+\newblock \doi{10.1137/15M1035993}.
+
+\bibitem[Chizat et~al.(2018)Chizat, Peyr{\'e}, Schmitzer, and
+  Vialard]{chizat2018scaling}
+L{\'e}na{\"\i}c Chizat, Gabriel Peyr{\'e}, Bernhard Schmitzer, and
+  Fran{\c{c}}ois-Xavier Vialard.
+\newblock {Scaling Algorithms for Unbalanced Transport Problems}.
+\newblock \emph{Mathematics of Computation}, 87\penalty0 (314):\penalty0
+  2563--2609, Feb. 2018.
+\newblock \doi{10.1090/mcom/3303}.
+
+\bibitem[Courty et~al.(2017)Courty, Flamary, Tuia, and
+  Rakotomamonjy]{domainadaptation}
+Nicolas Courty, R{\'e}mi Flamary, Devis Tuia, and Alain Rakotomamonjy.
+\newblock {Optimal Transport for Domain Adaptation}.
+\newblock \emph{IEEE Transactions on Pattern Analysis and Machine
+  Intelligence}, 39\penalty0 (9):\penalty0 1852--1865, Sep. 2017.
+\newblock \doi{10.1109/TPAMI.2016.2618739}.
+
+\bibitem[Cuturi(2013)]{cuturi2013sinkhorndistanceslightspeedcomputation}
+Marco Cuturi.
+\newblock {Sinkhorn Distances: Lightspeed Computation of Optimal Transportation
+  Distances}.
+\newblock In \emph{Advances in Neural Information Processing Systems
+  (NeurIPS)}, volume~26, pages 2292--2300, Dec. 2013.
+
+\bibitem[Donsker and Varadhan(1975)]{donsker1975asymptotic}
+M.~D. Donsker and S.~R.~S. Varadhan.
+\newblock {Asymptotic Evaluation of Certain Markov Process Expectations for
+  Large Time, I}.
+\newblock \emph{Communications on Pure and Applied Mathematics}, 28\penalty0
+  (1):\penalty0 1--47, 1975.
+\newblock \doi{10.1002/cpa.3160280102}.
+
+\bibitem[Fukunaga and Kasai(2022{\natexlab{a}})]{fukunaga2021blockcoordinate}
+Takumi Fukunaga and Hiroyuki Kasai.
+\newblock {Block-Coordinate Frank-Wolfe Algorithm and Convergence Analysis for
+  Semi-Relaxed Optimal Transport Problem}.
+\newblock In \emph{Proceedings of the IEEE International Conference on
+  Acoustics, Speech and Signal Processing (ICASSP)}, pages 5433--5437,
+  2022{\natexlab{a}}.
+\newblock \doi{10.1109/ICASSP43922.2022.9746032}.
+
+\bibitem[Fukunaga and Kasai(2022{\natexlab{b}})]{fukunaga2022convergence}
+Takumi Fukunaga and Hiroyuki Kasai.
+\newblock {On the Convergence of Semi-Relaxed Sinkhorn with Marginal Constraint
+  and OT Distance Gaps}.
+\newblock \emph{arXiv preprint arXiv:2205.13846}, 2022{\natexlab{b}}.
+\newblock \doi{10.48550/arXiv.2205.13846}.
+
+\bibitem[Le et~al.(2021)Le, Nguyen, Nguyen, Pham, Bui, and Ho]{le2021robust}
+Khang Le, Huy Nguyen, Quang~Minh Nguyen, Tung Pham, Hung Bui, and Nhat Ho.
+\newblock {On Robust Optimal Transport: Computational Complexity and Barycenter
+  Computation}.
+\newblock In \emph{Advances in Neural Information Processing Systems
+  (NeurIPS)}, volume~34, pages 21947--21959, 2021.
+
+\bibitem[Lemmens and Nussbaum(2014)]{Lemmens2013BirkhoffsVO}
+Bas Lemmens and Roger~D. Nussbaum.
+\newblock {Birkhoff's Version of Hilbert's Metric and Its Applications in
+  Analysis}.
+\newblock In \emph{Handbook of Hilbert Geometry}, pages 275--303. European
+  Mathematical Society, Z{\"u}rich, Switzerland, 2014.
+\newblock \doi{10.4171/147-1/10}.
+
+\bibitem[Liu et~al.(2025)Liu, Liao, Dan, Wang, Yu, Dong, Dong, Qi, and
+  Ong]{liu2025equivalent}
+Weiming Liu, Xinting Liao, Jun Dan, Fan Wang, Hua Yu, Junhao Dong, Shunjie
+  Dong, Lianyong Qi, and Yew-Soon Ong.
+\newblock {Solving Discrete (Semi) Unbalanced Optimal Transport with Equivalent
+  Transformation Mechanism and KKT-Multiplier Regularization}.
+\newblock In \emph{Advances in Neural Information Processing Systems
+  (NeurIPS)}, volume~38, 2025.
+
+\bibitem[Mignon et~al.(2025)Mignon, Galerne, Hidane, Louchet, and
+  Mille]{mignon2025semiunbalanced}
+Simon Mignon, Bruno Galerne, Moncef Hidane, C{\'e}cile Louchet, and Julien
+  Mille.
+\newblock {Semi-Unbalanced Optimal Transport for Reference-Based Image
+  Restoration and Synthesis}.
+\newblock \emph{SIAM Journal on Imaging Sciences}, 18\penalty0 (2):\penalty0
+  1372--1416, 2025.
+\newblock \doi{10.1137/24M1647540}.
+
+\bibitem[Nguyen et~al.(2024)Nguyen, Nguyen, Nguyen, Nguyen, Nguyen, and
+  Toh]{ibm2024partial}
+Anh~Duc Nguyen, Tuan~Dung Nguyen, Quang~Minh Nguyen, Hoang~H. Nguyen, Lam~M.
+  Nguyen, and Kim-Chuan Toh.
+\newblock {On Partial Optimal Transport: Revising the Infeasibility of Sinkhorn
+  and Efficient Gradient Methods}.
+\newblock In \emph{Proceedings of the AAAI Conference on Artificial
+  Intelligence}, volume~38, pages 14389--14397, 2024.
+\newblock \doi{10.1609/aaai.v38i13.29258}.
+
+\bibitem[Nguyen et~al.(2023)Nguyen, Nguyen, Zhou, and
+  Nguyen]{nguyen2023unbalanced}
+Quang~Minh Nguyen, Hoang~H. Nguyen, Yi~Zhou, and Lam~M. Nguyen.
+\newblock {On Unbalanced Optimal Transport: Gradient Methods, Sparsity and
+  Approximation Error}.
+\newblock \emph{Journal of Machine Learning Research}, 24\penalty0
+  (384):\penalty0 1--41, 2023.
+
+\bibitem[Nussbaum(2007)]{nussbaum2007fixed}
+Roger~D. Nussbaum.
+\newblock {Fixed Point Theorems and Denjoy--Wolff Theorems for Hilbert's
+  Projective Metric in Infinite Dimensions}.
+\newblock \emph{Topological Methods in Nonlinear Analysis}, 29\penalty0
+  (2):\penalty0 199--249, 2007.
+\newblock \doi{10.12775/TMNA.2007.010}.
+
+\bibitem[Pal(2024)]{pal2024difference}
+Soumik Pal.
+\newblock {On the Difference Between Entropic Cost and the Optimal Transport
+  Cost}.
+\newblock \emph{The Annals of Applied Probability}, 34\penalty0 (1B):\penalty0
+  1003--1028, 2024.
+\newblock \doi{10.1214/23-AAP1980}.
+
+\bibitem[Pele and Werman(2009)]{pele2009fast}
+Ofir Pele and Michael Werman.
+\newblock {Fast and Robust Earth Mover's Distances}.
+\newblock In \emph{Proceedings of the IEEE International Conference on Computer
+  Vision (ICCV)}, pages 460--467, 2009.
+\newblock \doi{10.1109/ICCV.2009.5459199}.
+
+\bibitem[Peyr{\'e} and Cuturi(2019)]{computationaloptitranbsoort}
+Gabriel Peyr{\'e} and Marco Cuturi.
+\newblock \emph{{Computational Optimal Transport}}.
+\newblock Foundations and Trends in Machine Learning, Hanover, MA, USA, 1
+  edition, 2019.
+\newblock \doi{10.1561/2200000073}.
+
+\bibitem[Pham et~al.(2020)Pham, Le, Ho, Pham, and Bui]{pham2020unbalanced}
+Khiem Pham, Khang Le, Nhat Ho, Tung Pham, and Hung Bui.
+\newblock {On Unbalanced Optimal Transport: An Analysis of Sinkhorn Algorithm}.
+\newblock In \emph{Proceedings of the International Conference on Machine
+  Learning (ICML)}, volume 119, pages 7673--7682, 2020.
+
+\bibitem[Rudin(1987)]{rudin1987real}
+Walter Rudin.
+\newblock \emph{{Real and Complex Analysis}}.
+\newblock McGraw-Hill, New York, NY, USA, 3 edition, 1987.
+
+\bibitem[S{\'e}journ{\'e} et~al.(2022)S{\'e}journ{\'e}, Vialard, and
+  Peyr{\'e}]{sejourne2022faster}
+Thibault S{\'e}journ{\'e}, Fran{\c{c}}ois-Xavier Vialard, and Gabriel
+  Peyr{\'e}.
+\newblock {Faster Unbalanced Optimal Transport: Translation Invariant Sinkhorn
+  and 1-D Frank-Wolfe}.
+\newblock In \emph{Proceedings of the International Conference on Artificial
+  Intelligence and Statistics (AISTATS)}, volume 151, pages 4995--5021, 2022.
+
+\bibitem[Tang et~al.(2024)Tang, Rahmanian, Shavlovsky, Thekumparampil, Xiao,
+  and Ying]{tang2024sinkhorn}
+Xun Tang, Holakou Rahmanian, Michael Shavlovsky, Kiran~Koshy Thekumparampil,
+  Tesi Xiao, and Lexing Ying.
+\newblock {A Sinkhorn-Type Algorithm for Constrained Optimal Transport}.
+\newblock \emph{arXiv preprint arXiv:2403.05054}, 2024.
+\newblock \doi{10.48550/arXiv.2403.05054}.
+
+\bibitem[Truong et~al.(2026)Truong, Pham, Nguyen, Luong, and
+  Tran]{truong2026accelerated}
+Nghia~Thu Truong, Qui~Phu Pham, Quang Nguyen, Dung Luong, and Mai Tran.
+\newblock {Accelerated Sinkhorn Algorithms for Partial Optimal Transport}.
+\newblock \emph{arXiv preprint arXiv:2601.17196}, 2026.
+\newblock \doi{10.48550/arXiv.2601.17196}.
+
+\bibitem[Vincent-Cuaz et~al.(2022)Vincent-Cuaz, Flamary, Corneli, Vayer, and
+  Courty]{vincentcuaz2022semirelaxed}
+C{\'e}dric Vincent-Cuaz, R{\'e}mi Flamary, Marco Corneli, Titouan Vayer, and
+  Nicolas Courty.
+\newblock {Semi-Relaxed Gromov-Wasserstein Divergence and Applications on
+  Graphs}.
+\newblock In \emph{Proceedings of the International Conference on Learning
+  Representations (ICLR)}, 2022.
+
+\bibitem[Yoon et~al.(2026)Yoon, Choi, and Choi]{yoon2026conditional}
+Jiwoo Yoon, Kyumin Choi, and Jaewoong Choi.
+\newblock {Conditional Unbalanced Optimal Transport Maps: An Outlier-Robust
+  Framework for Conditional Generative Modeling}.
+\newblock \emph{arXiv preprint arXiv:2603.06972}, 2026.
+\newblock \doi{10.48550/arXiv.2603.06972}.
+
+\bibitem[Zalinescu(2002)]{convexanalysis}
+Constantin Zalinescu.
+\newblock \emph{{Convex Analysis in General Vector Spaces}}.
+\newblock World Scientific, Singapore, 1 edition, 2002.
+\newblock \doi{10.1142/4862}.
+
+\end{thebibliography}

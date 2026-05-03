@@ -1,0 +1,50 @@
+This is BibTeX, Version 0.99e
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: Nicaise_neurips_2026.aux
+Reallocating 'name_of_file' (item size: 1) to 9 items.
+The style file: plainnat.bst
+Reallocating 'name_of_file' (item size: 1) to 8 items.
+Database file #1: biblio3.bib
+Warning--can't use both volume and number fields in ibm2024partial
+You've used 30 entries,
+            2773 wiz_defined-function locations,
+            794 strings with 11384 characters,
+and the built_in function-call counts, 16304 in all, are:
+= -- 1481
+> -- 940
+< -- 32
++ -- 319
+- -- 288
+* -- 1329
+:= -- 2422
+add.period$ -- 112
+call.type$ -- 30
+change.case$ -- 186
+chr.to.int$ -- 29
+cite$ -- 61
+duplicate$ -- 758
+empty$ -- 1293
+format.name$ -- 332
+if$ -- 3491
+int.to.chr$ -- 2
+int.to.str$ -- 1
+missing$ -- 35
+newline$ -- 178
+num.names$ -- 120
+pop$ -- 379
+preamble$ -- 1
+purify$ -- 156
+quote$ -- 0
+skip$ -- 613
+stack$ -- 0
+substring$ -- 648
+swap$ -- 161
+text.length$ -- 18
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 305
+warning$ -- 1
+while$ -- 136
+width$ -- 0
+write$ -- 447
+(There was 1 warning)
